@@ -1,5 +1,5 @@
-use crate::Tweet;
 use crate::Config;
+use crate::Tweet;
 
 use chrono::{offset, DateTime, FixedOffset};
 use futures::stream::StreamExt;
@@ -40,13 +40,9 @@ impl<'a> DownloadClient<'a> {
         .await;
     }
 
-    async fn download_tweet(
-        &self,
-        tweet: &Tweet,
-        user_filter: Option<&str>,
-    ) {
+    async fn download_tweet(&self, tweet: &Tweet, user_filter: Option<&str>) {
         if let Some(filter) = user_filter {
-            if filter.to_lowercase() != tweet.user.screen_name.to_lowercase(){
+            if filter.to_lowercase() != tweet.user.screen_name.to_lowercase() {
                 return;
             }
         }
@@ -80,7 +76,13 @@ impl<'a> DownloadClient<'a> {
         fs::rename(&temp_dir, &target_dir).unwrap();
     }
 
-    fn write_tweet_text(&self, tweet: &Tweet, dir_path: impl AsRef<OsStr>, base_name: &str, datetime: &DateTime<FixedOffset>) {
+    fn write_tweet_text(
+        &self,
+        tweet: &Tweet,
+        dir_path: impl AsRef<OsStr>,
+        base_name: &str,
+        datetime: &DateTime<FixedOffset>,
+    ) {
         let mut body = self.unicode_slice(
             &tweet.full_text,
             [
@@ -110,19 +112,14 @@ impl<'a> DownloadClient<'a> {
     }
 
     fn unicode_slice(&self, input: &str, bounds: [usize; 2]) -> String {
-        let chars = input.char_indices().map(|(i, _)| i).collect::<Vec<_>>();
-        let low = chars[bounds[0]];
-        let high = chars[std::cmp::min(bounds[1], std::cmp::max(0, chars.len() - 1))];
-        let slice = &input[low..high];
-        slice.to_string()
+        input
+            .chars()
+            .skip(bounds[0])
+            .take(bounds[1].checked_sub(bounds[0]).unwrap())
+            .collect()
     }
 
-    async fn download_media(
-        &self,
-        tweet: &Tweet,
-        dir_path: impl AsRef<OsStr>,
-        base_name: &str,
-    ) {
+    async fn download_media(&self, tweet: &Tweet, dir_path: impl AsRef<OsStr>, base_name: &str) {
         if let Some(e) = &tweet.extended_entities {
             let photos = e
                 .media
@@ -143,12 +140,8 @@ impl<'a> DownloadClient<'a> {
                     i,
                     self.url_file_ext(&photo.media_url_https)
                 ));
-                self.download_file(
-                    &photo.media_url_https,
-                    &[("name", "orig")],
-                    &file_name,
-                )
-                .await;
+                self.download_file(&photo.media_url_https, &[("name", "orig")], &file_name)
+                    .await;
             }
 
             // Download videos
