@@ -9,6 +9,7 @@ use std::fs::{self, File};
 use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::time::UNIX_EPOCH;
+use tempdir::TempDir;
 use tokio::time::{sleep, Duration};
 use url::Url;
 
@@ -53,13 +54,10 @@ impl<'a> DownloadClient<'a> {
             .with_timezone(&offset);
         let date = datetime.format("%Y%m%d");
         let base_name = format!("{}_{}_{}", date, &tweet.id, &tweet.user.screen_name);
-        let temp_name = format!("{}.temp", base_name);
         let target_dir = Path::new(&self.config.directory)
             .join(&tweet.user.screen_name)
             .join(&base_name);
-        let temp_dir = Path::new(&self.config.directory)
-            .join(&tweet.user.screen_name)
-            .join(&temp_name);
+        let temp_dir = TempDir::new(&format!("tweet_{}", &tweet.id)).unwrap();
 
         if target_dir.exists() {
             eprintln!("Skipping {}", &base_name);
@@ -69,11 +67,21 @@ impl<'a> DownloadClient<'a> {
         // Prepare to download and write content
         eprintln!("Downloading {}", base_name);
         fs::create_dir_all(&temp_dir).unwrap();
-        self.write_tweet_text(&tweet, &temp_dir, &base_name, &datetime);
-        self.download_media(&tweet, &temp_dir, &base_name).await;
+        self.write_tweet_text(&tweet, &temp_dir.path(), &base_name, &datetime);
+        self.download_media(&tweet, &temp_dir.path(), &base_name)
+            .await;
 
         // move temp_dir to target_dir
-        fs::rename(&temp_dir, &target_dir).unwrap();
+        let options = fs_extra::dir::CopyOptions {
+            copy_inside: true,
+            ..fs_extra::dir::CopyOptions::new()
+        };
+        fs_extra::move_items(
+            &[temp_dir.path()],
+            &target_dir,
+            &options,
+        )
+        .unwrap();
     }
 
     fn write_tweet_text(
