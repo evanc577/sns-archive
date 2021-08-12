@@ -8,6 +8,7 @@ use std::ffi::OsStr;
 use std::fs::File;
 use std::io::{prelude::*, BufReader};
 use std::path::Path;
+use tokio::time::Duration;
 
 pub struct TwitterClient<'a> {
     client: Client,
@@ -134,6 +135,7 @@ impl<'a> TwitterClient<'a> {
 
         let client = ClientBuilder::new()
             .default_headers(headers)
+            .timeout(Duration::from_secs(30))
             .build()
             .unwrap();
 

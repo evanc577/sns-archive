@@ -1,11 +1,13 @@
 use crate::Config;
 use crate::Tweet;
 
+use anyhow::{Context, Result};
 use chrono::{offset, DateTime, FixedOffset};
 use futures::stream::StreamExt;
-use reqwest::Client;
+use itertools::Itertools;
+use reqwest::{Client, ClientBuilder};
 use std::ffi::OsStr;
-use std::fs::{self, File};
+use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::time::UNIX_EPOCH;
@@ -18,10 +20,34 @@ pub struct DownloadClient<'a> {
     config: &'a Config,
 }
 
+#[derive(Debug)]
+struct DownloadError {
+    text: String,
+}
+
+impl std::fmt::Display for DownloadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.text)
+    }
+}
+
+impl std::error::Error for DownloadError {}
+
+impl DownloadError {
+    fn new(text: &str) -> DownloadError {
+        DownloadError {
+            text: text.to_string(),
+        }
+    }
+}
+
 impl<'a> DownloadClient<'a> {
     pub fn new(config: &'a Config) -> DownloadClient {
         DownloadClient {
-            client: Client::new(),
+            client: ClientBuilder::new()
+                .timeout(Duration::from_secs(30))
+                .build()
+                .unwrap(),
             config,
         }
     }
@@ -31,44 +57,67 @@ impl<'a> DownloadClient<'a> {
         tweets: impl Iterator<Item = &Tweet>,
         user_filter: Option<&str>,
     ) {
-        futures::stream::iter(
-            tweets
+        let mut errors =
+            futures::stream::iter(tweets.into_iter().map(|t| self.save_tweet(&t, user_filter)))
+                .buffer_unordered(20)
+                .collect::<Vec<_>>()
+                .await
                 .into_iter()
-                .map(|t| self.download_tweet(&t, user_filter)),
-        )
-        .buffer_unordered(20)
-        .collect::<Vec<_>>()
-        .await;
-    }
+                .filter_map(|r| r.err())
+                .peekable();
 
-    async fn download_tweet(&self, tweet: &Tweet, user_filter: Option<&str>) {
-        if let Some(filter) = user_filter {
-            if filter.to_lowercase() != tweet.user.screen_name.to_lowercase() {
-                return;
+        if errors.peek().is_some() {
+            eprintln!("\nErrors:");
+            for error in errors {
+                eprintln!();
+                for cause in error.chain() {
+                    eprintln!("{}", cause);
+                }
             }
         }
 
+        eprintln!("\nDownload complete");
+    }
+
+    async fn save_tweet(&self, tweet: &Tweet, user_filter: Option<&str>) -> Result<()> {
+        if let Some(filter) = user_filter {
+            if filter.to_lowercase() != tweet.user.screen_name.to_lowercase() {
+                return Ok(());
+            }
+        }
+
+        // Parse tweet timestamp
         let offset = offset::FixedOffset::east(self.config.timezone_offset);
         let datetime = DateTime::parse_from_str(tweet.created_at.as_str(), "%a %b %d %T %z %Y")
-            .unwrap()
+            .context(format!(
+                "{}: Failed to parse date: {}",
+                &tweet.id, &tweet.created_at
+            ))?
             .with_timezone(&offset);
         let date = datetime.format("%Y%m%d");
+
+        // Generate base name
         let base_name = format!("{}_{}_{}", date, &tweet.id, &tweet.user.screen_name);
         let target_dir = Path::new(&self.config.directory)
             .join(&tweet.user.screen_name)
             .join(&base_name);
-        let temp_dir = TempDir::new(&format!("tweet_{}", &tweet.id)).unwrap();
 
+        // Skip download if target directory already exists
         if target_dir.exists() {
-            eprintln!("Skipping {}", &base_name);
-            return;
+            return Ok(());
         }
+
+        // Create temporary directory
+        let temp_dir = TempDir::new(&format!("tweet_{}", &tweet.id)).context(format!(
+            "{}: Failed to create temporary directory",
+            &tweet.id
+        ))?;
 
         // Prepare to download and write content
         eprintln!("Downloading {}", base_name);
-        fs::create_dir_all(&temp_dir).unwrap();
-        self.write_tweet_text(&tweet, &temp_dir.path(), &base_name, &datetime);
-        self.download_media(&tweet, &temp_dir.path(), &base_name)
+        self.write_tweet_text(&tweet, &temp_dir.path(), &base_name, &datetime)?;
+        let download_result = self
+            .download_media(&tweet, &temp_dir.path(), &base_name)
             .await;
 
         // move temp_dir to target_dir
@@ -76,12 +125,14 @@ impl<'a> DownloadClient<'a> {
             copy_inside: true,
             ..fs_extra::dir::CopyOptions::new()
         };
-        fs_extra::move_items(
-            &[temp_dir.path()],
-            &target_dir,
-            &options,
-        )
-        .unwrap();
+        fs_extra::move_items(&[&temp_dir.path()], &target_dir, &options).context(format!(
+            "{}: Failed to move {:?} to {:?}",
+            &tweet.id,
+            &temp_dir.path(),
+            &target_dir
+        ))?;
+
+        download_result
     }
 
     fn write_tweet_text(
@@ -90,7 +141,8 @@ impl<'a> DownloadClient<'a> {
         dir_path: impl AsRef<OsStr>,
         base_name: &str,
         datetime: &DateTime<FixedOffset>,
-    ) {
+    ) -> Result<()> {
+        // Truncate tweet text to display range, expand urls
         let mut body = self.unicode_slice(
             &tweet.full_text,
             [
@@ -102,6 +154,7 @@ impl<'a> DownloadClient<'a> {
             body = body.replace(&url_entity.url, &url_entity.expanded_url);
         }
 
+        // Generate text to write to file
         let mut data = "".to_string();
         data.push_str(&format!(
             "url: https://twitter.com/i/status/{}\n",
@@ -113,21 +166,37 @@ impl<'a> DownloadClient<'a> {
         data.push_str(&format!("\n"));
         data.push_str(&format!("{}\n", body));
 
+        // Write text to file
         let file_name = Path::new(&dir_path).join(format!("{}.txt", &base_name));
-        let f = File::create(file_name).unwrap();
+        let f = File::create(&file_name).context(format!(
+            "{}: Failed to create file {:?}",
+            &tweet.id, &file_name
+        ))?;
         let mut f = BufWriter::new(f);
-        f.write_all(data.as_bytes()).unwrap();
+        f.write_all(data.as_bytes()).context(format!(
+            "{}: Failed to write to file {:?}",
+            &tweet.id, &file_name
+        ))?;
+
+        Ok(())
     }
 
     fn unicode_slice(&self, input: &str, bounds: [usize; 2]) -> String {
         input
             .chars()
             .skip(bounds[0])
-            .take(bounds[1].checked_sub(bounds[0]).unwrap())
+            .take(bounds[1].saturating_sub(bounds[0]))
             .collect()
     }
 
-    async fn download_media(&self, tweet: &Tweet, dir_path: impl AsRef<OsStr>, base_name: &str) {
+    async fn download_media(
+        &self,
+        tweet: &Tweet,
+        dir_path: impl AsRef<OsStr>,
+        base_name: &str,
+    ) -> Result<()> {
+        let mut error_urls = vec![];
+
         if let Some(e) = &tweet.extended_entities {
             let photos = e
                 .media
@@ -146,10 +215,20 @@ impl<'a> DownloadClient<'a> {
                     "{}_img{}.{}",
                     &base_name,
                     i,
-                    self.url_file_ext(&photo.media_url_https)
+                    self.url_file_ext(&photo.media_url_https)?
                 ));
-                self.download_file(&photo.media_url_https, &[("name", "orig")], &file_name)
-                    .await;
+                let res = self
+                    .download_file(&photo.media_url_https, &[("name", "orig")], &file_name)
+                    .await
+                    .context(format!(
+                        "{}: Failed to download file {}",
+                        &tweet.id, &photo.media_url_https
+                    ));
+                if let Err(err) = res {
+                    for e in err.chain() {
+                        error_urls.push(format!("{}", e));
+                    }
+                }
             }
 
             // Download videos
@@ -167,11 +246,32 @@ impl<'a> DownloadClient<'a> {
                     "{}_vid{}.{}",
                     &base_name,
                     i,
-                    self.url_file_ext(&max_video.url)
+                    self.url_file_ext(&max_video.url)?
                 ));
-                self.download_file(&max_video.url, &[], &file_name).await;
+                let res = self
+                    .download_file(&max_video.url, &[], &file_name)
+                    .await
+                    .context(format!(
+                        "{}: Failed to download file {}",
+                        &tweet.id, &max_video.url
+                    ));
+                if let Err(err) = res {
+                    for e in err.chain() {
+                        error_urls.push(format!("{}", e));
+                    }
+                }
             }
         }
+
+        if !error_urls.is_empty() {
+            let err: String = error_urls
+                .into_iter()
+                .intersperse("\n".to_string())
+                .collect();
+            Err(DownloadError::new(&err))?
+        }
+
+        Ok(())
     }
 
     async fn download_file(
@@ -179,47 +279,53 @@ impl<'a> DownloadClient<'a> {
         url: &str,
         query: &[(&str, &str)],
         path: impl AsRef<Path> + AsRef<OsStr>,
-    ) {
+    ) -> Result<()> {
         loop {
-            let resp = self.client.get(url).query(&query).send().await.unwrap();
+            let resp = self.client.get(url).query(&query).send().await?;
 
             if resp.status().is_success() {
-                let mut file = File::create(&path).unwrap();
+                let mut file = File::create(&path)?;
                 let mut stream = resp.bytes_stream();
                 while let Some(b) = stream.next().await {
-                    let chunk = b.unwrap();
-                    file.write(&chunk).unwrap();
+                    let chunk = b?;
+                    file.write(&chunk)?;
                 }
-                return;
+                break;
             }
 
             if resp.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                let reset_header = "x-rate-limit-reset";
                 let rate_reset_at = resp
                     .headers()
-                    .get("x-rate-limit-reset")
-                    .unwrap()
-                    .to_str()
-                    .unwrap();
-                let rate_reset_within = Duration::from_secs(rate_reset_at.parse::<u64>().unwrap())
-                    - UNIX_EPOCH.elapsed().unwrap();
+                    .get(reset_header)
+                    .ok_or(DownloadError::new(&format!("No header {}", reset_header)))?
+                    .to_str()?;
+                let rate_reset_within =
+                    Duration::from_secs(rate_reset_at.parse::<u64>()?) - UNIX_EPOCH.elapsed()?;
                 eprintln!("Rate limit hit, sleeping for {:?}", rate_reset_within);
                 sleep(rate_reset_within).await;
                 continue;
             }
 
-            eprintln!("{:#?}", &resp);
-            panic!();
+            if resp.status() == reqwest::StatusCode::FORBIDDEN {
+                return Err(DownloadError::new("403 forbidden"))?;
+            }
+
+            return Err(DownloadError::new(format!("{:?}", &resp).as_str()))?;
         }
+
+        Ok(())
     }
 
-    fn url_file_ext(&self, url: &str) -> String {
+    fn url_file_ext(&self, url: &str) -> Result<String> {
         let parsed = Url::parse(&url).unwrap();
         let path = parsed.path();
-        Path::new(&path)
+        let error_text = format!("Failed to parse extension for {}", url);
+        Ok(Path::new(&path)
             .extension()
-            .unwrap()
+            .ok_or(DownloadError::new(&error_text))?
             .to_str()
-            .unwrap()
-            .to_string()
+            .ok_or(DownloadError::new(&error_text))?
+            .to_string())
     }
 }
