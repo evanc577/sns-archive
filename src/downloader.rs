@@ -11,7 +11,7 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::time::UNIX_EPOCH;
-use tempdir::TempDir;
+use tempfile;
 use tokio::time::{sleep, Duration};
 use url::Url;
 
@@ -108,10 +108,13 @@ impl<'a> DownloadClient<'a> {
         }
 
         // Create temporary directory
-        let temp_dir = TempDir::new(&format!("tweet_{}", &tweet.id)).context(format!(
-            "{}: Failed to create temporary directory",
-            &tweet.id
-        ))?;
+        let temp_dir = tempfile::Builder::new()
+            .prefix(&format!("tweet_{}", &tweet.id))
+            .tempdir()
+            .context(format!(
+                "{}: Failed to create temporary directory",
+                &tweet.id
+            ))?;
 
         // Prepare to download and write content
         eprintln!("Downloading {}", base_name);
