@@ -2,6 +2,7 @@ use crate::config::Config;
 use crate::downloader::DownloadClient;
 use crate::twitter_client::{Tweet, TwitterClient};
 
+use anyhow::Result;
 use clap::{App, Arg};
 
 mod config;
@@ -10,6 +11,22 @@ mod twitter_client;
 
 #[tokio::main]
 async fn main() {
+    let r = run().await;
+
+    let code = match r {
+        Ok(_) => exitcode::OK,
+        Err(e) => {
+            for cause in e.chain() {
+                eprintln!("{}", cause);
+            }
+            exitcode::SOFTWARE
+        },
+    };
+
+    std::process::exit(code);
+}
+
+async fn run() -> Result<()> {
     let matches = App::new(env!("CARGO_PKG_NAME"))
         .version(env!("CARGO_PKG_VERSION"))
         .author(env!("CARGO_PKG_AUTHORS"))
@@ -31,17 +48,17 @@ async fn main() {
                 .takes_value(true),
         )
         .get_matches();
-    let config = Config::read();
+    let config = Config::read()?;
 
     // Retrieve tweets
     let twitter_client = TwitterClient::new(&config);
     let mut all_tweets: Vec<Tweet> = vec![];
     if let Some(input_file) = matches.value_of("INPUT") {
-        let tweets = twitter_client.process_ids_file(&input_file).await.unwrap();
+        let tweets = twitter_client.process_ids_file(&input_file).await?;
         all_tweets.extend(tweets);
     } else {
         for user in &config.users {
-            let tweets = twitter_client.process_user(&user).await.unwrap();
+            let tweets = twitter_client.process_user(&user).await?;
             all_tweets.extend(tweets);
         }
     }
@@ -51,4 +68,6 @@ async fn main() {
     download_client
         .download_tweets(all_tweets.iter(), matches.value_of("FILTER"))
         .await;
+
+    Ok(())
 }

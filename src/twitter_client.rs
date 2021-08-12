@@ -1,5 +1,6 @@
 use crate::Config;
 
+use anyhow::{Context, Result};
 use itertools::Itertools;
 use reqwest::{header::*, Client, ClientBuilder};
 use serde::{Deserialize, Deserializer};
@@ -142,7 +143,7 @@ impl<'a> TwitterClient<'a> {
         TwitterClient { client, config }
     }
 
-    pub async fn process_user(&self, user: &str) -> Result<Vec<Tweet>, ()> {
+    pub async fn process_user(&self, user: &str) -> Result<Vec<Tweet>>{
         let path = Path::new(&self.config.directory).join(user);
         let start = match std::fs::read_dir(path) {
             Err(_) => None,
@@ -163,15 +164,15 @@ impl<'a> TwitterClient<'a> {
                 .max(),
         };
 
-        let tweets = self.user_timeline(user, start).await;
+        let tweets = self.user_timeline(user, start).await?;
         Ok(tweets)
     }
 
     pub async fn process_ids_file(
         &self,
         path: impl AsRef<Path> + AsRef<OsStr>,
-    ) -> Result<Vec<Tweet>, ()> {
-        let file = File::open(&path).unwrap();
+    ) -> Result<Vec<Tweet>> {
+        let file = File::open(&path)?;
         let reader = BufReader::new(file);
 
         let ids: Vec<_> = reader
@@ -179,12 +180,12 @@ impl<'a> TwitterClient<'a> {
             .filter_map(|l| Some(l.ok()?.trim().to_string()))
             .collect();
 
-        let tweets = self.lookup(ids.iter().map(|s| s.as_ref())).await;
+        let tweets = self.lookup(ids.iter().map(|s| s.as_ref())).await?;
 
         Ok(tweets)
     }
 
-    pub async fn lookup(&self, tweet_ids: impl Iterator<Item = &str>) -> Vec<Tweet> {
+    pub async fn lookup(&self, tweet_ids: impl Iterator<Item = &str>) -> Result<Vec<Tweet>> {
         let chunks = tweet_ids.chunks(100);
 
         let mut all_tweets = vec![];
@@ -204,20 +205,19 @@ impl<'a> TwitterClient<'a> {
                 .post("https://api.twitter.com/1.1/statuses/lookup.json")
                 .form(&params)
                 .send()
-                .await
-                .unwrap();
+                .await?;
 
-            let tweets: Vec<Tweet> = resp.json().await.unwrap();
+            let tweets: Vec<Tweet> = resp.json().await.context("Failed to parse lookup endpoint JSON")?;
             all_tweets.extend(tweets);
         }
 
-        all_tweets
+        Ok(all_tweets
             .into_iter()
             .filter(|t| !t.retweeted_status)
-            .collect()
+            .collect())
     }
 
-    pub async fn user_timeline(&self, screen_name: &str, since_id: Option<u64>) -> Vec<Tweet> {
+    pub async fn user_timeline(&self, screen_name: &str, since_id: Option<u64>) -> Result<Vec<Tweet>> {
         let mut params_base = vec![
             ("screen_name", screen_name.to_owned()),
             ("count", "200".to_string()),
@@ -247,11 +247,10 @@ impl<'a> TwitterClient<'a> {
                 .get("https://api.twitter.com/1.1/statuses/user_timeline.json")
                 .form(&params)
                 .send()
-                .await
-                .unwrap();
+                .await?;
 
             // Exit loop if no more tweets
-            let tweets: Vec<Tweet> = resp.json().await.unwrap();
+            let tweets: Vec<Tweet> = resp.json().await.context("Failed to parse user_timeline endpoint JSON")?;
             if tweets.is_empty() {
                 break;
             }
@@ -274,10 +273,10 @@ impl<'a> TwitterClient<'a> {
             all_tweets.extend(tweets);
         }
 
-        all_tweets
+        Ok(all_tweets
             .into_iter()
             .filter(|t| t.user.screen_name == screen_name)
             .filter(|t| !t.retweeted_status)
-            .collect()
+            .collect())
     }
 }

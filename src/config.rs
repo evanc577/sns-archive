@@ -1,3 +1,4 @@
+use anyhow::{Context, Result};
 use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
@@ -10,9 +11,9 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn read() -> Config {
+    pub fn read() -> Result<Config> {
         let path = "config.toml";
-        let data = std::fs::read_to_string(path).expect(&format!("Unable to read {}", path));
-        toml::from_str(&data).expect(&format!("Unable to parse {}", path))
+        let data = std::fs::read_to_string(path).context(format!("Failed to read {}", path))?;
+        Ok(toml::from_str(&data).context(format!("Failed to parse {}", path))?)
     }
 }
