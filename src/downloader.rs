@@ -11,7 +11,6 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::time::UNIX_EPOCH;
-use tempfile;
 use tokio::time::{sleep, Duration};
 use url::Url;
 
