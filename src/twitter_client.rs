@@ -143,7 +143,7 @@ impl<'a> TwitterClient<'a> {
         TwitterClient { client, config }
     }
 
-    pub async fn process_user(&self, user: &str) -> Result<Vec<Tweet>>{
+    pub async fn process_user(&self, user: &str) -> Result<Vec<Tweet>> {
         let path = Path::new(&self.config.directory).join(user);
         let start = match std::fs::read_dir(path) {
             Err(_) => None,
@@ -190,7 +190,7 @@ impl<'a> TwitterClient<'a> {
 
         let mut all_tweets = vec![];
 
-        eprintln!("Querying tweets...");
+        println!("Querying tweets...");
         for chunk in chunks.into_iter() {
             let id: String = chunk.intersperse(",").collect();
             let params = [
@@ -207,7 +207,10 @@ impl<'a> TwitterClient<'a> {
                 .send()
                 .await?;
 
-            let tweets: Vec<Tweet> = resp.json().await.context("Failed to parse lookup endpoint JSON")?;
+            let tweets: Vec<Tweet> = resp
+                .json()
+                .await
+                .context("Failed to parse lookup endpoint JSON")?;
             all_tweets.extend(tweets);
         }
 
@@ -217,7 +220,11 @@ impl<'a> TwitterClient<'a> {
             .collect())
     }
 
-    pub async fn user_timeline(&self, screen_name: &str, since_id: Option<u64>) -> Result<Vec<Tweet>> {
+    pub async fn user_timeline(
+        &self,
+        screen_name: &str,
+        since_id: Option<u64>,
+    ) -> Result<Vec<Tweet>> {
         let mut params_base = vec![
             ("screen_name", screen_name.to_owned()),
             ("count", "200".to_string()),
@@ -234,7 +241,7 @@ impl<'a> TwitterClient<'a> {
         let mut all_tweets = vec![];
 
         let mut max_id: Option<u64> = None;
-        eprintln!("Retrieving {}...", &screen_name);
+        println!("Retrieving {}...", &screen_name);
         loop {
             // Query Twitter API
             let mut params = params_base.clone();
@@ -250,7 +257,10 @@ impl<'a> TwitterClient<'a> {
                 .await?;
 
             // Exit loop if no more tweets
-            let tweets: Vec<Tweet> = resp.json().await.context("Failed to parse user_timeline endpoint JSON")?;
+            let tweets: Vec<Tweet> = resp
+                .json()
+                .await
+                .context("Failed to parse user_timeline endpoint JSON")?;
             if tweets.is_empty() {
                 break;
             }
@@ -275,7 +285,7 @@ impl<'a> TwitterClient<'a> {
 
         Ok(all_tweets
             .into_iter()
-            .filter(|t| t.user.screen_name == screen_name)
+            .filter(|t| t.user.screen_name.to_lowercase() == screen_name.to_lowercase())
             .filter(|t| !t.retweeted_status)
             .collect())
     }

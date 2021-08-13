@@ -75,7 +75,7 @@ impl<'a> DownloadClient<'a> {
             }
         }
 
-        eprintln!("\nDownload complete");
+        println!("\nDownload complete");
     }
 
     async fn save_tweet(&self, tweet: &Tweet, user_filter: Option<&str>) -> Result<()> {
@@ -116,7 +116,7 @@ impl<'a> DownloadClient<'a> {
             ))?;
 
         // Prepare to download and write content
-        eprintln!("Downloading {}", base_name);
+        println!("Downloading {}", base_name);
         self.write_tweet_text(&tweet, &temp_dir.path(), &base_name, &datetime)?;
         let download_result = self
             .download_media(&tweet, &temp_dir.path(), &base_name)
