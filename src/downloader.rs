@@ -1,6 +1,6 @@
+use crate::config::Config;
 use crate::response_helpers;
-use crate::Config;
-use crate::Tweet;
+use crate::tweet::Tweet;
 
 use anyhow::{Context, Result};
 use chrono::{offset, DateTime, FixedOffset};

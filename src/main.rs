@@ -1,14 +1,15 @@
 use crate::config::Config;
 use crate::downloader::DownloadClient;
-use crate::twitter_client::{Tweet, TwitterClient};
+use crate::twitter_client::TwitterClient;
 
 use anyhow::Result;
 use clap::{App, Arg};
 
 mod config;
 mod downloader;
-mod twitter_client;
 mod response_helpers;
+mod tweet;
+mod twitter_client;
 
 #[tokio::main]
 async fn main() {
@@ -21,7 +22,7 @@ async fn main() {
                 eprintln!("{}", cause);
             }
             exitcode::SOFTWARE
-        },
+        }
     };
 
     std::process::exit(code);
@@ -56,7 +57,9 @@ async fn run() -> Result<()> {
     let all_tweets = if let Some(input_file) = matches.value_of("INPUT") {
         twitter_client.process_ids_file(&input_file).await?
     } else {
-        twitter_client.process_users(config.users.iter().map(|s| s.as_ref())).await?
+        twitter_client
+            .process_users(config.users.iter().map(|s| s.as_ref()))
+            .await?
     };
 
     // Download tweets
