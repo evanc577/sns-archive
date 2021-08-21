@@ -1,6 +1,8 @@
+use crate::response_helpers;
 use crate::Config;
 
 use anyhow::{Context, Result};
+use futures::stream::StreamExt;
 use itertools::Itertools;
 use reqwest::{header::*, Client, ClientBuilder};
 use serde::{Deserialize, Deserializer};
@@ -9,7 +11,28 @@ use std::ffi::OsStr;
 use std::fs::File;
 use std::io::{prelude::*, BufReader};
 use std::path::Path;
-use tokio::time::Duration;
+use tokio::time::{sleep, Duration};
+
+#[derive(Debug)]
+struct TwitterError {
+    text: String,
+}
+
+impl std::fmt::Display for TwitterError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.text)
+    }
+}
+
+impl std::error::Error for TwitterError {}
+
+impl TwitterError {
+    fn new(text: &str) -> Self {
+        Self {
+            text: text.to_string(),
+        }
+    }
+}
 
 pub struct TwitterClient<'a> {
     client: Client,
@@ -143,6 +166,88 @@ impl<'a> TwitterClient<'a> {
         TwitterClient { client, config }
     }
 
+    pub async fn process_ids_file(
+        &self,
+        path: impl AsRef<Path> + AsRef<OsStr>,
+    ) -> Result<Vec<Tweet>> {
+        let file = File::open(&path)?;
+        let reader = BufReader::new(file);
+
+        let ids: Vec<_> = reader
+            .lines()
+            .filter_map(|l| Some(l.ok()?.trim().to_string()))
+            .collect();
+
+        self.process_ids(ids.iter().map(|s| s.as_ref())).await
+    }
+
+    pub async fn process_ids(&self, ids: impl Iterator<Item = &str>) -> Result<Vec<Tweet>> {
+        let tweets = self.lookup(ids).await?;
+
+        Ok(tweets)
+    }
+
+    async fn lookup(&self, tweet_ids: impl Iterator<Item = &str>) -> Result<Vec<Tweet>> {
+        let chunks = tweet_ids.chunks(100);
+
+        let mut all_tweets = vec![];
+
+        println!("Querying tweets...");
+        for chunk in chunks.into_iter() {
+            let id: String = chunk.intersperse(",").collect();
+            let params = [
+                ("id", id.as_str()),
+                ("include_entities", "true"),
+                ("trim_user", "false"),
+                ("tweet_mode", "extended"),
+            ];
+
+            let resp = self
+                .client
+                .post("https://api.twitter.com/1.1/statuses/lookup.json")
+                .form(&params)
+                .send()
+                .await?;
+
+            if let Some(duration) = response_helpers::check_rate_limit(&resp) {
+                eprintln!("Rate limit hit, sleeping for {:?}", duration);
+                sleep(duration).await;
+                continue;
+            }
+
+            let tweets: Vec<Tweet> = resp
+                .json()
+                .await
+                .context("Failed to parse lookup endpoint JSON")?;
+            all_tweets.extend(tweets);
+        }
+
+        Ok(all_tweets
+            .into_iter()
+            .unique_by(|t| t.id)
+            .filter(|t| !t.retweeted_status)
+            .collect())
+    }
+
+    pub async fn process_users(&self, users: impl Iterator<Item = &str>) -> Result<Vec<Tweet>> {
+        let results = futures::stream::iter(users.map(|u| self.process_user(u)))
+            .buffer_unordered(20)
+            .collect::<Vec<_>>()
+            .await;
+
+        let (ok, err): (Vec<_>, Vec<_>) = results.into_iter().partition(|r| r.is_ok());
+        if !err.is_empty() {
+            for e in err {
+                eprintln!("{:?}", e);
+            }
+            Err(TwitterError::new("Error processing users"))?
+        }
+
+        let tweets = ok.into_iter().flatten().flatten().collect();
+
+        Ok(tweets)
+    }
+
     pub async fn process_user(&self, user: &str) -> Result<Vec<Tweet>> {
         let path = Path::new(&self.config.directory).join(user);
         let start = match std::fs::read_dir(path) {
@@ -166,58 +271,6 @@ impl<'a> TwitterClient<'a> {
 
         let tweets = self.user_timeline(user, start).await?;
         Ok(tweets)
-    }
-
-    pub async fn process_ids_file(
-        &self,
-        path: impl AsRef<Path> + AsRef<OsStr>,
-    ) -> Result<Vec<Tweet>> {
-        let file = File::open(&path)?;
-        let reader = BufReader::new(file);
-
-        let ids: Vec<_> = reader
-            .lines()
-            .filter_map(|l| Some(l.ok()?.trim().to_string()))
-            .collect();
-
-        let tweets = self.lookup(ids.iter().map(|s| s.as_ref())).await?;
-
-        Ok(tweets)
-    }
-
-    pub async fn lookup(&self, tweet_ids: impl Iterator<Item = &str>) -> Result<Vec<Tweet>> {
-        let chunks = tweet_ids.chunks(100);
-
-        let mut all_tweets = vec![];
-
-        println!("Querying tweets...");
-        for chunk in chunks.into_iter() {
-            let id: String = chunk.intersperse(",").collect();
-            let params = [
-                ("id", id.as_str()),
-                ("include_entities", "true"),
-                ("trim_user", "false"),
-                ("tweet_mode", "extended"),
-            ];
-
-            let resp = self
-                .client
-                .post("https://api.twitter.com/1.1/statuses/lookup.json")
-                .form(&params)
-                .send()
-                .await?;
-
-            let tweets: Vec<Tweet> = resp
-                .json()
-                .await
-                .context("Failed to parse lookup endpoint JSON")?;
-            all_tweets.extend(tweets);
-        }
-
-        Ok(all_tweets
-            .into_iter()
-            .filter(|t| !t.retweeted_status)
-            .collect())
     }
 
     pub async fn user_timeline(
@@ -256,6 +309,12 @@ impl<'a> TwitterClient<'a> {
                 .send()
                 .await?;
 
+            if let Some(duration) = response_helpers::check_rate_limit(&resp) {
+                eprintln!("Rate limit hit, sleeping for {:?}", duration);
+                sleep(duration).await;
+                continue;
+            }
+
             // Exit loop if no more tweets
             let tweets: Vec<Tweet> = resp
                 .json()
@@ -285,6 +344,7 @@ impl<'a> TwitterClient<'a> {
 
         Ok(all_tweets
             .into_iter()
+            .unique_by(|t| t.id)
             .filter(|t| t.user.screen_name.to_lowercase() == screen_name.to_lowercase())
             .filter(|t| !t.retweeted_status)
             .collect())

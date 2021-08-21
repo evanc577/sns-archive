@@ -8,6 +8,7 @@ use clap::{App, Arg};
 mod config;
 mod downloader;
 mod twitter_client;
+mod response_helpers;
 
 #[tokio::main]
 async fn main() {
@@ -52,16 +53,11 @@ async fn run() -> Result<()> {
 
     // Retrieve tweets
     let twitter_client = TwitterClient::new(&config);
-    let mut all_tweets: Vec<Tweet> = vec![];
-    if let Some(input_file) = matches.value_of("INPUT") {
-        let tweets = twitter_client.process_ids_file(&input_file).await?;
-        all_tweets.extend(tweets);
+    let all_tweets = if let Some(input_file) = matches.value_of("INPUT") {
+        twitter_client.process_ids_file(&input_file).await?
     } else {
-        for user in &config.users {
-            let tweets = twitter_client.process_user(&user).await?;
-            all_tweets.extend(tweets);
-        }
-    }
+        twitter_client.process_users(config.users.iter().map(|s| s.as_ref())).await?
+    };
 
     // Download tweets
     let download_client = DownloadClient::new(&config);

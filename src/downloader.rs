@@ -1,5 +1,6 @@
 use crate::Config;
 use crate::Tweet;
+use crate::response_helpers;
 
 use anyhow::{Context, Result};
 use chrono::{offset, DateTime, FixedOffset};
@@ -10,7 +11,7 @@ use std::ffi::OsStr;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
-use std::time::UNIX_EPOCH;
+
 use tokio::time::{sleep, Duration};
 use url::Url;
 
@@ -33,8 +34,8 @@ impl std::fmt::Display for DownloadError {
 impl std::error::Error for DownloadError {}
 
 impl DownloadError {
-    fn new(text: &str) -> DownloadError {
-        DownloadError {
+    fn new(text: &str) -> Self {
+        Self {
             text: text.to_string(),
         }
     }
@@ -295,18 +296,9 @@ impl<'a> DownloadClient<'a> {
                 break;
             }
 
-            if resp.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
-                let reset_header = "x-rate-limit-reset";
-                let rate_reset_at = resp
-                    .headers()
-                    .get(reset_header)
-                    .ok_or(DownloadError::new(&format!("No header {}", reset_header)))?
-                    .to_str()?;
-                let rate_reset_within =
-                    Duration::from_secs(rate_reset_at.parse::<u64>()?) - UNIX_EPOCH.elapsed()?;
-                eprintln!("Rate limit hit, sleeping for {:?}", rate_reset_within);
-                sleep(rate_reset_within).await;
-                continue;
+            if let Some(duration) = response_helpers::check_rate_limit(&resp) {
+                eprintln!("Rate limit hit, sleeping for {:?}", duration);
+                sleep(duration).await;
             }
 
             if resp.status() == reqwest::StatusCode::FORBIDDEN {
