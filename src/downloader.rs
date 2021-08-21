@@ -1,6 +1,6 @@
+use crate::response_helpers;
 use crate::Config;
 use crate::Tweet;
-use crate::response_helpers;
 
 use anyhow::{Context, Result};
 use chrono::{offset, DateTime, FixedOffset};
@@ -8,10 +8,9 @@ use futures::stream::StreamExt;
 use itertools::Itertools;
 use reqwest::{Client, ClientBuilder};
 use std::ffi::OsStr;
-use std::fs::File;
-use std::io::{BufWriter, Write};
 use std::path::Path;
-
+use tokio::fs::File;
+use tokio::io::AsyncWriteExt;
 use tokio::time::{sleep, Duration};
 use url::Url;
 
@@ -118,7 +117,8 @@ impl<'a> DownloadClient<'a> {
 
         // Prepare to download and write content
         println!("Downloading {}", base_name);
-        self.write_tweet_text(&tweet, &temp_dir.path(), &base_name, &datetime)?;
+        self.write_tweet_text(&tweet, &temp_dir.path(), &base_name, &datetime)
+            .await?;
         let download_result = self
             .download_media(&tweet, &temp_dir.path(), &base_name)
             .await;
@@ -138,7 +138,7 @@ impl<'a> DownloadClient<'a> {
         download_result
     }
 
-    fn write_tweet_text(
+    async fn write_tweet_text(
         &self,
         tweet: &Tweet,
         dir_path: impl AsRef<OsStr>,
@@ -171,12 +171,11 @@ impl<'a> DownloadClient<'a> {
 
         // Write text to file
         let file_name = Path::new(&dir_path).join(format!("{}.txt", &base_name));
-        let f = File::create(&file_name).context(format!(
+        let mut f = File::create(&file_name).await.context(format!(
             "{}: Failed to create file {:?}",
             &tweet.id, &file_name
         ))?;
-        let mut f = BufWriter::new(f);
-        f.write_all(data.as_bytes()).context(format!(
+        f.write_all(data.as_bytes()).await.context(format!(
             "{}: Failed to write to file {:?}",
             &tweet.id, &file_name
         ))?;
@@ -287,11 +286,11 @@ impl<'a> DownloadClient<'a> {
             let resp = self.client.get(url).query(&query).send().await?;
 
             if resp.status().is_success() {
-                let mut file = File::create(&path)?;
+                let mut file = File::create(&path).await?;
                 let mut stream = resp.bytes_stream();
                 while let Some(b) = stream.next().await {
                     let chunk = b?;
-                    file.write(&chunk)?;
+                    file.write_all(&chunk).await?;
                 }
                 break;
             }
