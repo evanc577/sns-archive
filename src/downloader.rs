@@ -298,6 +298,7 @@ impl<'a> DownloadClient<'a> {
             if let Some(duration) = response_helpers::check_rate_limit(&resp) {
                 eprintln!("Rate limit hit, sleeping for {:?}", duration);
                 sleep(duration).await;
+                continue;
             }
 
             if resp.status() == reqwest::StatusCode::FORBIDDEN {
