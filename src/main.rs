@@ -5,22 +5,26 @@ use std::process::{Command, Stdio};
 
 #[derive(Deserialize)]
 struct Config {
-    download_all: Vec<YTChannel>,
+    channels: Vec<YTChannel>,
     filter: String,
-    download_filter: Vec<YTChannel>,
 }
 
 #[derive(Deserialize)]
 struct YTChannel {
     channel_id: String,
     display_name: String,
+    #[serde(default)]
+    apply_filter: bool,
+    #[serde(default)]
+    always_redownload: bool,
+    custom_filter: Option<String>,
+    playlist_end: Option<usize>,
 }
 
 fn main() -> Result<(), ()> {
     let config = read_config();
 
-    download(config.download_filter.iter(), Some(&config.filter))?;
-    download(config.download_all.iter(), None)?;
+    download(config.channels.iter(), config.filter.as_str())?;
 
     Ok(())
 }
@@ -33,7 +37,7 @@ fn read_config() -> Config {
 
 fn download<'a>(
     channels: impl Iterator<Item = &'a YTChannel>,
-    filter: Option<&str>,
+    filter: &str,
 ) -> Result<(), ()> {
     for channel in channels {
         // Check if new channel
@@ -48,10 +52,7 @@ fn download<'a>(
         };
 
         // Build and run yt-dl command
-        let args = match filter {
-            Some(f) => process_channel_filter(&channel, &target_dir, &f, new_channel)?,
-            None => process_channel_all(&channel, &target_dir)?,
-        };
+        let args = generate_cmd_args(&channel, &target_dir, &filter, new_channel)?;
         let output = Command::new("yt-dlp")
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
@@ -74,18 +75,14 @@ fn download<'a>(
     Ok(())
 }
 
-fn process_channel_filter(
+fn generate_cmd_args(
     channel: &YTChannel,
     target_dir: &str,
-    filter: &str,
+    default_filter: &str,
     new_channel: bool,
 ) -> Result<Vec<String>, ()> {
-    let playlist_end = match new_channel {
-        true => "1000000000",
-        false => "100",
-    };
 
-    let args = vec![
+    let mut args = vec![
         "--format-sort".to_string(),
         "res,fps,vcodec,acodec".to_string(),
         "--ignore-config".to_string(),
@@ -95,12 +92,8 @@ fn process_channel_filter(
         "--compat-options".to_string(),
         "no-live-chat".to_string(),
         "--ignore-errors".to_string(),
-        "--download-archive".to_string(),
-        "downloaded.txt".to_string(),
-        "--match-title".to_string(),
-        filter.to_owned(),
-        "--playlist-end".to_string(),
-        playlist_end.to_owned(),
+        "--match-filter".to_string(),
+        "!is_live".to_string(),
         "--remux-video".to_string(),
         "mkv".to_string(),
         "--output".to_string(),
@@ -109,35 +102,30 @@ fn process_channel_filter(
             .to_str()
             .unwrap()
             .to_owned(),
-        channel_id_to_url(&channel.channel_id),
     ];
 
-    Ok(args)
-}
+    if channel.apply_filter {
+        args.push("--match-title".to_string());
+        match &channel.custom_filter {
+            Some(f) => args.push(f.to_string()),
+            None => args.push(default_filter.to_string()),
+        }
+    }
 
-fn process_channel_all(channel: &YTChannel, target_dir: &str) -> Result<Vec<String>, ()> {
-    let args = vec![
-        "--format-sort".to_string(),
-        "res,fps,vcodec,acodec".to_string(),
-        "--ignore-config".to_string(),
-        "--verbose".to_string(),
-        "--all-subs".to_string(),
-        "--embed-subs".to_string(),
-        "--compat-options".to_string(),
-        "no-live-chat".to_string(),
-        "--ignore-errors".to_string(),
-        "--playlist-end".to_string(),
-        "50".to_string(),
-        "--remux-video".to_string(),
-        "mkv".to_string(),
-        "--output".to_string(),
-        Path::new(&target_dir)
-            .join("%(upload_date)s_%(title)s_%(id)s.%(ext)s")
-            .to_str()
-            .unwrap()
-            .to_owned(),
-        channel_id_to_url(&channel.channel_id),
-    ];
+    if !channel.always_redownload {
+        args.push("--download-archive".to_string());
+        args.push("downloaded.txt".to_string());
+    }
+
+    if !new_channel {
+        args.push("--playlist-end".to_string());
+        match channel.playlist_end {
+            Some(end) => args.push(end.to_string()),
+            None => args.push("100".to_string()),
+        }
+    }
+
+    args.push(channel_id_to_url(&channel.channel_id));
 
     Ok(args)
 }
