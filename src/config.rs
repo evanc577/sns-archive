@@ -1,7 +1,9 @@
-use regex::Regex;
-use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
+
+use lazy_static::lazy_static;
+use regex::Regex;
+use serde::Deserialize;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Config {
@@ -35,7 +37,6 @@ pub fn read_config() -> Result<Config, String> {
         .map_err(|e| format!("Error reading config.toml: {}", e))?;
     let conf: Config =
         toml::from_str(&conf_contents).map_err(|e| format!("Error parsing config.yml: {}", e))?;
-    // println!("config: {:#?}", conf);
     Ok(conf)
 }
 
@@ -57,6 +58,5 @@ pub fn read_token(cookies_file: &str) -> Result<String, String> {
         .as_str()
         .to_owned();
 
-    // println!("token: {:?}", token);
     Ok(token)
 }

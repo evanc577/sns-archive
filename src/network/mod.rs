@@ -1,13 +1,14 @@
-use chrono::DateTime;
-use futures::stream::{self, StreamExt};
-use reqwest::header;
-use serde::Deserialize;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fs::{self, File};
 use std::io::prelude::*;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
+
+use chrono::DateTime;
+use futures::stream::{self, StreamExt};
+use reqwest::header;
+use serde::Deserialize;
 use tokio::io;
 
 use crate::config::Config;
@@ -27,7 +28,7 @@ fn get_prefix(post: &Post) -> String {
 }
 
 fn post_dir_exists(dir: impl AsRef<Path>, prefix: &str) -> bool {
-    let start = prefix.splitn(3, "-").take(2).collect::<Vec<_>>().join("-");
+    let start = prefix.splitn(3, '-').take(2).collect::<Vec<_>>().join("-");
     let paths = match fs::read_dir(dir) {
         Ok(p) => p,
         Err(_) => return false,
@@ -41,7 +42,7 @@ fn post_dir_exists(dir: impl AsRef<Path>, prefix: &str) -> bool {
         let cur_start = cur_path
             .file_name()
             .to_string_lossy()
-            .splitn(3, "-")
+            .splitn(3, '-')
             .take(2)
             .collect::<Vec<_>>()
             .join("-");
@@ -63,7 +64,7 @@ fn get_url(post: &Post) -> String {
 }
 
 pub async fn download(conf: &Config, token: &str) -> Result<(), String> {
-    let n = Network::new(&conf, &token).await?;
+    let n = Network::new(conf, token).await?;
 
     // get a list of all posts to download
     println!("Getting all post info...");
@@ -85,7 +86,7 @@ pub async fn download(conf: &Config, token: &str) -> Result<(), String> {
         .into_iter()
         .flatten();
 
-    let mtx = Arc::new(Mutex::new(0usize));
+    let mtx = Arc::new(Mutex::new(()));
     let posts_iter = posts.map(|p| n.download_post(p, mtx.clone()));
     let mut downloads = stream::iter(posts_iter).buffer_unordered(conf.max_connections);
 
@@ -112,13 +113,9 @@ pub async fn download(conf: &Config, token: &str) -> Result<(), String> {
             Ok(DownloadOk::Downloaded(p)) => {
                 tx.send(format!("Downloaded {}", get_url(&p))).unwrap()
             }
-            Err(e) => {
-                if let DownloadErr::ResponseErr(_, post, code) = e {
-                    if code == reqwest::StatusCode::FORBIDDEN {
-                        tx.send(format!("Wrong password for {}", get_url(&post)))
-                            .unwrap();
-                    }
-                }
+            Err(DownloadErr::ResponseErr(_, post, reqwest::StatusCode::FORBIDDEN)) => {
+                tx.send(format!("Wrong password for {}", get_url(&post)))
+                    .unwrap();
             }
             _ => (),
         }
@@ -271,7 +268,7 @@ impl<'a> Network {
     async fn download_post(
         &self,
         mut post: Post,
-        mtx: Arc<Mutex<usize>>,
+        mtx: Arc<Mutex<()>>,
     ) -> Result<DownloadOk, DownloadErr> {
         let prefix = get_prefix(&post);
 
@@ -331,7 +328,7 @@ impl<'a> Network {
                         None => "",
                     };
                     let save_path = format!("{}/{}-vid{:02}{}", temp_dir, prefix, i, ext);
-                    self.download_direct(&video_url, &save_path).await?;
+                    self.download_direct(video_url, &save_path).await?;
                 }
             }
         }
@@ -346,7 +343,7 @@ impl<'a> Network {
             let content = format!(
                 "https://weverse.io/{}/artist/{}\n{} ({}):\n{}",
                 post.community.name.to_lowercase(),
-                post.id.to_string(),
+                post.id,
                 &post.community_user.nickname,
                 &post.created_at,
                 body
@@ -354,7 +351,7 @@ impl<'a> Network {
             let mut buffer = File::create(save_path.as_str())
                 .map_err(|e| DownloadErr::FileCreateErr(save_path.clone(), e))?;
             buffer
-                .write_all(&content.as_bytes())
+                .write_all(content.as_bytes())
                 .map_err(|e| DownloadErr::FileWriteErr(save_path.clone(), e))?;
         }
 
@@ -367,7 +364,7 @@ impl<'a> Network {
     async fn download_post_info(
         &self,
         post: &'a Post,
-        mtx: Arc<Mutex<usize>>,
+        mtx: Arc<Mutex<()>>,
     ) -> Result<Post, DownloadErr> {
         let url = API_POST_URL
             .replace("{artist_id}", post.community.id.to_string().as_str())
@@ -379,12 +376,11 @@ impl<'a> Network {
             let shown_url = POST_URL
                 .replace("{artist}", post.community.name.to_string().as_str())
                 .replace("{post_id}", post.id.to_string().as_str());
-            std::io::stdout().lock();
             println!("Password required for {}:", shown_url);
             let password = io::AsyncBufReadExt::lines(io::BufReader::new(io::stdin()))
                 .next_line()
                 .await
-                .map_err(|e| DownloadErr::StdinErrStr(e))?
+                .map_err(DownloadErr::StdinErrStr)?
                 .ok_or(DownloadErr::StdinErr)?;
 
             std::mem::drop(guard);
