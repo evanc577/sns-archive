@@ -11,9 +11,9 @@ use reqwest::header;
 use serde::Deserialize;
 use tokio::io;
 
-use crate::config::Config;
-use crate::network::network_structs::*;
-use crate::network::urls::*;
+use crate::config::weverse::Config;
+use self::network_structs::*;
+use self::urls::*;
 
 mod network_structs;
 mod urls;

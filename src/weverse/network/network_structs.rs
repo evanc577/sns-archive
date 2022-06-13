@@ -1,4 +1,4 @@
-use crate::config::Config;
+use crate::config::weverse::Config;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::error::Error;
