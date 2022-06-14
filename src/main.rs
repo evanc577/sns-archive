@@ -10,8 +10,8 @@ use sns_archive::config::Config;
 #[clap(author, version, about)]
 struct Args {
     /// Services to archive
-    #[clap(arg_enum, value_parser, short, long)]
-    services: Vec<Sns>,
+    #[clap(arg_enum, value_parser)]
+    sns: Sns,
 
     /// Config file location
     #[clap(short, long, default_value_os_t = default_config_path())]
@@ -45,12 +45,10 @@ async fn run() -> Result<()> {
     let args = Args::parse();
     let conf = Config::read(args.config)?;
 
-    for sns in args.services {
-        match sns {
-            Sns::Weverse => sns_archive::weverse::network::download(&conf.weverse)
-                .await
-                .map_err(|s| anyhow::anyhow!(s))?,
-        }
+    match args.sns {
+        Sns::Weverse => sns_archive::weverse::download(&conf.weverse)
+            .await
+            .map_err(|s| anyhow::anyhow!(s))?,
     }
 
     Ok(())
