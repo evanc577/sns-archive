@@ -1,16 +1,19 @@
-use crate::config::twitter::TwitterConfig;
-use super::response_helpers;
-use super::tweet::Tweet;
+use std::ffi::OsStr;
+use std::fs::File;
+use std::io::prelude::*;
+use std::io::BufReader;
+use std::path::Path;
 
 use anyhow::{Context, Result};
 use futures::stream::StreamExt;
 use itertools::Itertools;
-use reqwest::{header::*, Client, ClientBuilder};
-use std::ffi::OsStr;
-use std::fs::File;
-use std::io::{prelude::*, BufReader};
-use std::path::Path;
+use reqwest::header::*;
+use reqwest::{Client, ClientBuilder};
 use tokio::time::{sleep, Duration};
+
+use super::response_helpers;
+use super::tweet::Tweet;
+use crate::config::twitter::TwitterConfig;
 
 #[derive(Debug)]
 struct TwitterError {
@@ -129,7 +132,7 @@ impl<'a> TwitterClient<'a> {
             for e in err {
                 eprintln!("{:?}", e);
             }
-            Err(TwitterError::new("Error processing users"))?
+            return Err(TwitterError::new("Error processing users").into());
         }
 
         let tweets = ok.into_iter().flatten().flatten().collect();
@@ -149,8 +152,7 @@ impl<'a> TwitterClient<'a> {
                         .to_str()?
                         .to_string()
                         .split('_')
-                        .skip(1)
-                        .next()?
+                        .nth(1)?
                         .parse::<u64>()
                         .ok()?;
                     Some(max_id)

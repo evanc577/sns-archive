@@ -23,6 +23,6 @@ impl TwitterConfig {
     pub fn read() -> Result<TwitterConfig> {
         let path = "config.toml";
         let data = std::fs::read_to_string(path).context(format!("Failed to read {}", path))?;
-        Ok(toml::from_str(&data).context(format!("Failed to parse {}", path))?)
+        toml::from_str(&data).context(format!("Failed to parse {}", path))
     }
 }

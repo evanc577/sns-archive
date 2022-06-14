@@ -86,7 +86,7 @@ pub enum DownloadErr {
     LastIdErr,
     ParsePostTypeErr(String),
     RequestErr(String, reqwest::Error),
-    ResponseErr(String, Post, reqwest::StatusCode),
+    ResponseErr(String, Box<Post>, reqwest::StatusCode),
     ResponseBytesErr(String, reqwest::Error),
     ResponseJsonErr(String, serde_json::Error),
     ResponseTextErr(String, reqwest::Error),

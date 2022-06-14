@@ -409,7 +409,7 @@ impl<'a> Network {
         if !resp.status().is_success() {
             return Err(DownloadErr::ResponseErr(
                 url.clone(),
-                post.clone(),
+                Box::new(post.clone()),
                 resp.status(),
             ));
         }

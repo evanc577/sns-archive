@@ -57,7 +57,7 @@ impl<'a> DownloadClient<'a> {
         user_filter: Option<&str>,
     ) {
         let mut errors =
-            futures::stream::iter(tweets.into_iter().map(|t| self.save_tweet(&t, user_filter)))
+            futures::stream::iter(tweets.into_iter().map(|t| self.save_tweet(t, user_filter)))
                 .buffer_unordered(20)
                 .collect::<Vec<_>>()
                 .await
@@ -117,10 +117,10 @@ impl<'a> DownloadClient<'a> {
 
         // Prepare to download and write content
         println!("Downloading {}", base_name);
-        self.write_tweet_text(&tweet, &temp_dir.path(), &base_name, &datetime)
+        self.write_tweet_text(tweet, &temp_dir.path(), &base_name, &datetime)
             .await?;
         let download_result = self
-            .download_media(&tweet, &temp_dir.path(), &base_name)
+            .download_media(tweet, &temp_dir.path(), &base_name)
             .await;
 
         // move temp_dir to target_dir
@@ -166,7 +166,7 @@ impl<'a> DownloadClient<'a> {
         data.push_str(&format!("name: {}\n", &tweet.user.name));
         data.push_str(&format!("screen_name: {}\n", &tweet.user.screen_name));
         data.push_str(&format!("created_at: {}\n", &datetime.format("%+")));
-        data.push_str(&format!("\n"));
+        data.push('\n');
         data.push_str(&format!("{}\n", body));
 
         // Write text to file
@@ -212,7 +212,7 @@ impl<'a> DownloadClient<'a> {
                 .collect::<Vec<_>>();
 
             // Download photos
-            for (photo, i) in photos.iter().zip(1 as usize..) {
+            for (photo, i) in photos.iter().zip(1_usize..) {
                 let file_name = Path::new(&dir_path).join(format!(
                     "{}_img{}.{}",
                     &base_name,
@@ -234,7 +234,7 @@ impl<'a> DownloadClient<'a> {
             }
 
             // Download videos
-            for (video, i) in videos.iter().zip(1 as usize..) {
+            for (video, i) in videos.iter().zip(1_usize..) {
                 // Find highest bitrate video
                 let max_video = match video
                     .variants
@@ -270,7 +270,7 @@ impl<'a> DownloadClient<'a> {
                 .into_iter()
                 .intersperse("\n".to_string())
                 .collect();
-            Err(DownloadError::new(&err))?
+            return Err(DownloadError::new(&err).into())
         }
 
         Ok(())
@@ -302,24 +302,24 @@ impl<'a> DownloadClient<'a> {
             }
 
             if resp.status() == reqwest::StatusCode::FORBIDDEN {
-                return Err(DownloadError::new("403 forbidden"))?;
+                return Err(DownloadError::new("403 forbidden").into());
             }
 
-            return Err(DownloadError::new(format!("{:?}", &resp).as_str()))?;
+            return Err(DownloadError::new(format!("{:?}", &resp).as_str()).into());
         }
 
         Ok(())
     }
 
     fn url_file_ext(&self, url: &str) -> Result<String> {
-        let parsed = Url::parse(&url).unwrap();
+        let parsed = Url::parse(url).unwrap();
         let path = parsed.path();
         let error_text = format!("Failed to parse extension for {}", url);
         Ok(Path::new(&path)
             .extension()
-            .ok_or(DownloadError::new(&error_text))?
+            .ok_or_else(|| DownloadError::new(&error_text))?
             .to_str()
-            .ok_or(DownloadError::new(&error_text))?
+            .ok_or_else(|| DownloadError::new(&error_text))?
             .to_string())
     }
 }
