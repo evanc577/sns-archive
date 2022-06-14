@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::process;
 
 use anyhow::Result;
-use clap::{ArgEnum, Parser};
+use clap::{Parser, Subcommand};
 use sns_archive::config::Config;
 
 /// Archive various social networking services
@@ -10,16 +10,25 @@ use sns_archive::config::Config;
 #[clap(author, version, about)]
 struct Args {
     /// Services to archive
-    #[clap(arg_enum, value_parser)]
+    #[clap(subcommand)]
     sns: Sns,
 
     /// Config file location
-    #[clap(short, long, default_value_os_t = default_config_path())]
+    #[clap(short, long, default_value_os_t = default_config_path(), value_parser)]
     config: PathBuf,
 }
 
-#[derive(ArgEnum, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[derive(Subcommand, Debug)]
 enum Sns {
+    Twitter {
+        /// Read tweets to save from input file, 1 tweet ID per line
+        #[clap(short, long, value_parser)]
+        input: Option<PathBuf>,
+
+        /// Only save tweets from user
+        #[clap(short, long, value_parser)]
+        filter: Option<String>,
+    },
     Weverse,
 }
 
@@ -46,9 +55,17 @@ async fn run() -> Result<()> {
     let conf = Config::read(args.config)?;
 
     match args.sns {
-        Sns::Weverse => sns_archive::weverse::download(&conf.weverse)
-            .await
-            .map_err(|s| anyhow::anyhow!(s))?,
+        Sns::Weverse => {
+            sns_archive::weverse::download(&conf.weverse)
+                .await
+                .map_err(|s| anyhow::anyhow!(s))?;
+        }
+        Sns::Twitter {
+            input: i,
+            filter: f,
+        } => {
+            sns_archive::twitter::download(conf.twitter, i.as_deref(), f.as_deref()).await?;
+        }
     }
 
     Ok(())

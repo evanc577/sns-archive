@@ -3,13 +3,16 @@ use std::path::Path;
 use anyhow::Result;
 use serde::Deserialize;
 
+use self::twitter::TwitterConfig;
 use self::weverse::WeverseConfig;
 
 pub mod weverse;
+pub mod twitter;
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize)]
 pub struct Config {
     pub weverse: WeverseConfig,
+    pub twitter: TwitterConfig,
 }
 
 impl Config {
