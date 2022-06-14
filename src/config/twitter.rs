@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde::{Deserialize, Deserializer};
 
 #[derive(Deserialize, Debug)]
@@ -17,12 +17,4 @@ where
 {
     let s: String = Deserialize::deserialize(deserializer)?;
     Ok(shellexpand::tilde(&s).to_string())
-}
-
-impl TwitterConfig {
-    pub fn read() -> Result<TwitterConfig> {
-        let path = "config.toml";
-        let data = std::fs::read_to_string(path).context(format!("Failed to read {}", path))?;
-        toml::from_str(&data).context(format!("Failed to parse {}", path))
-    }
 }
