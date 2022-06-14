@@ -280,13 +280,12 @@ impl<'a> Network {
             "normal" => artist_config.artist_download_path.clone(),
             "to_fans" => artist_config.moments_download_path.clone(),
             _ => return Err(DownloadErr::ParsePostTypeErr(post.post_type.to_string())),
-        }
-        .unwrap_or_else(|| String::from("posts"));
-        let dir = format!("{}/{}", download_dir, prefix);
-        let temp_dir = format!("{}.temp", dir);
+        };
+        let dir = download_dir.join(&prefix);
+        let temp_dir = download_dir.join(prefix.clone() + ".temp");
 
         // don't download if directory exists
-        if fs::metadata(dir.as_str()).is_ok() {
+        if fs::metadata(&dir).is_ok() {
             return Ok(DownloadOk::Skipped(post.clone()));
         }
         if post_dir_exists(download_dir, &prefix) {
@@ -300,10 +299,10 @@ impl<'a> Network {
         // recreate temp directory
         let _ = fs::remove_dir_all(&temp_dir);
         let _ = fs::remove_file(&temp_dir);
-        let _ = fs::create_dir_all(temp_dir.as_str()).map_err(|e| {
+        let _ = fs::create_dir_all(&temp_dir).map_err(|e| {
             format!(
-                "Error could not create directory {}: {}",
-                temp_dir.as_str(),
+                "Error could not create directory {:?}: {}",
+                &temp_dir,
                 e
             )
         });
@@ -315,7 +314,8 @@ impl<'a> Network {
                     Some(ext_idx) => &photo.url[ext_idx..],
                     None => "",
                 };
-                let save_path = format!("{}/{}-img{:02}{}", temp_dir, prefix, i, ext);
+                let filename = format!("{}-img{:02}{}", prefix, i, ext);
+                let save_path = temp_dir.join(filename);
                 self.download_direct(&photo.url, &save_path).await?
             }
         }
@@ -328,7 +328,8 @@ impl<'a> Network {
                         Some(ext_idx) => &video_url[ext_idx..],
                         None => "",
                     };
-                    let save_path = format!("{}/{}-vid{:02}{}", temp_dir, prefix, i, ext);
+                    let filename = format!("{}-vid{:02}{}", prefix, i, ext);
+                    let save_path = temp_dir.join(filename);
                     self.download_direct(video_url, &save_path).await?;
                 }
             }
@@ -336,7 +337,8 @@ impl<'a> Network {
 
         // write contents
         {
-            let save_path = format!("{}/{}-content.txt", temp_dir, prefix);
+            let filename = format!("{}-content.txt", prefix);
+            let save_path = temp_dir.join(filename);
             let body = match &post.body {
                 Some(v) => v.as_str(),
                 None => "",
@@ -349,15 +351,15 @@ impl<'a> Network {
                 &post.created_at,
                 body
             );
-            let mut buffer = File::create(save_path.as_str())
-                .map_err(|e| DownloadErr::FileCreateErr(save_path.clone(), e))?;
+            let mut buffer = File::create(&save_path)
+                .map_err(|e| DownloadErr::FileCreateErr(save_path.to_string_lossy().into_owned(), e))?;
             buffer
                 .write_all(content.as_bytes())
-                .map_err(|e| DownloadErr::FileWriteErr(save_path.clone(), e))?;
+                .map_err(|e| DownloadErr::FileWriteErr(save_path.to_string_lossy().into_owned(), e))?;
         }
 
         // rename temp directory
-        let _ = fs::rename(&temp_dir, &dir).map_err(|e| DownloadErr::RenameErr(temp_dir, e))?;
+        let _ = fs::rename(&temp_dir, &dir).map_err(|e| DownloadErr::RenameErr(temp_dir.to_string_lossy().into_owned(), e))?;
 
         Ok(DownloadOk::Downloaded(post.clone()))
     }
@@ -424,7 +426,7 @@ impl<'a> Network {
         Ok(post_resp)
     }
 
-    async fn download_direct(&self, url: &str, save_path: &str) -> Result<(), DownloadErr> {
+    async fn download_direct(&self, url: &str, save_path: impl AsRef<Path>) -> Result<(), DownloadErr> {
         let data = self
             .anon_client
             .get(url)
@@ -434,10 +436,10 @@ impl<'a> Network {
             .bytes()
             .await
             .map_err(|e| DownloadErr::ResponseBytesErr(url.to_string(), e))?;
-        let mut buffer = File::create(save_path)
-            .map_err(|e| DownloadErr::FileCreateErr(save_path.to_string(), e))?;
+        let mut buffer = File::create(&save_path)
+            .map_err(|e| DownloadErr::FileCreateErr(save_path.as_ref().to_string_lossy().into_owned(), e))?;
         buffer
             .write_all(&data)
-            .map_err(|e| DownloadErr::FileWriteErr(save_path.to_string(), e))
+            .map_err(|e| DownloadErr::FileWriteErr(save_path.as_ref().to_string_lossy().into_owned(), e))
     }
 }

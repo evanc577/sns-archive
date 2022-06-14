@@ -4,6 +4,7 @@ use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
 pub struct YoutubeConfig {
+    #[serde(deserialize_with = "super::deserialize_directory")]
     pub download_path: PathBuf,
     pub channels: Vec<YTChannel>,
     pub filter: String,

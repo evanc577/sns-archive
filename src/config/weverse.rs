@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -18,12 +18,12 @@ pub struct WeverseConfig {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct ArtistConfig {
-    pub artist_download_path: Option<String>,
-    pub moments_download_path: Option<String>,
-    pub videos_download_path: Option<String>,
+    #[serde(deserialize_with = "super::deserialize_directory")]
+    pub artist_download_path: PathBuf,
+    #[serde(deserialize_with = "super::deserialize_directory")]
+    pub moments_download_path: PathBuf,
     pub recent_artist: Option<isize>,
     pub recent_moments: Option<isize>,
-    pub recent_videos: Option<isize>,
 }
 
 fn default_keep_open() -> bool {
