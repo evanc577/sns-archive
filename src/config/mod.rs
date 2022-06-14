@@ -1,6 +1,8 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
+use home_dir::HomeDirExt;
+use serde::de::Error;
 use serde::{Deserialize, Deserializer};
 
 use self::twitter::TwitterConfig;
@@ -29,6 +31,6 @@ fn deserialize_directory<'de, D>(deserializer: D) -> Result<PathBuf, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let s: String = Deserialize::deserialize(deserializer)?;
-    Ok(PathBuf::from(shellexpand::tilde(&s).as_ref()))
+    let s: PathBuf = Deserialize::deserialize(deserializer)?;
+    s.expand_home().map_err(D::Error::custom)
 }
