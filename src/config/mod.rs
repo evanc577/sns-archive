@@ -13,9 +13,9 @@ pub mod youtube;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
-    pub weverse: WeverseConfig,
-    pub twitter: TwitterConfig,
-    pub youtube: YoutubeConfig,
+    pub weverse: Option<WeverseConfig>,
+    pub twitter: Option<TwitterConfig>,
+    pub youtube: Option<YoutubeConfig>,
 }
 
 impl Config {

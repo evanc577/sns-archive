@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::process;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
 use sns_archive::config::Config;
 
@@ -57,18 +57,30 @@ async fn run() -> Result<()> {
 
     match args.sns {
         Sns::Weverse => {
-            sns_archive::weverse::download(&conf.weverse)
-                .await
-                .map_err(|s| anyhow::anyhow!(s))?;
+            if let Some(conf) = conf.weverse {
+                sns_archive::weverse::download(&conf)
+                    .await
+                    .map_err(|s| anyhow::anyhow!(s))?;
+            } else {
+                return Err(anyhow!("Missing weverse section in config file"));
+            }
         }
         Sns::Twitter {
             input: i,
             filter: f,
         } => {
-            sns_archive::twitter::download(conf.twitter, i.as_deref(), f.as_deref()).await?;
+            if let Some(conf) = conf.twitter {
+                sns_archive::twitter::download(conf, i.as_deref(), f.as_deref()).await?;
+            } else {
+                return Err(anyhow!("Missing twitter section in config file"));
+            }
         }
         Sns::Youtube => {
-            sns_archive::youtube::download(conf.youtube)?;
+            if let Some(conf) = conf.youtube {
+                sns_archive::youtube::download(conf)?;
+            } else {
+                return Err(anyhow!("Missing youtube section in config file"));
+            }
         }
     }
 
