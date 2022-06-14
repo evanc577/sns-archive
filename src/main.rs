@@ -30,6 +30,7 @@ enum Sns {
         filter: Option<String>,
     },
     Weverse,
+    Youtube,
 }
 
 fn default_config_path() -> PathBuf {
@@ -65,6 +66,9 @@ async fn run() -> Result<()> {
             filter: f,
         } => {
             sns_archive::twitter::download(conf.twitter, i.as_deref(), f.as_deref()).await?;
+        }
+        Sns::Youtube => {
+            sns_archive::youtube::download(conf.youtube)?;
         }
     }
 

@@ -5,14 +5,17 @@ use serde::Deserialize;
 
 use self::twitter::TwitterConfig;
 use self::weverse::WeverseConfig;
+use self::youtube::YoutubeConfig;
 
 pub mod weverse;
 pub mod twitter;
+pub mod youtube;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
     pub weverse: WeverseConfig,
     pub twitter: TwitterConfig,
+    pub youtube: YoutubeConfig,
 }
 
 impl Config {
