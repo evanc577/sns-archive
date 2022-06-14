@@ -11,7 +11,7 @@ use reqwest::header;
 use serde::Deserialize;
 use tokio::io;
 
-use crate::config::weverse::Config;
+use crate::config::weverse::{WeverseConfig, read_token};
 use self::network_structs::*;
 use self::urls::*;
 
@@ -63,8 +63,9 @@ fn get_url(post: &Post) -> String {
         .replace("{post_id}", post.id.to_string().as_str())
 }
 
-pub async fn download(conf: &Config, token: &str) -> Result<(), String> {
-    let n = Network::new(conf, token).await?;
+pub async fn download(conf: &WeverseConfig) -> Result<(), String> {
+    let token = read_token(&conf.cookies_file)?;
+    let n = Network::new(conf, &token).await?;
 
     // get a list of all posts to download
     println!("Getting all post info...");
@@ -159,7 +160,7 @@ async fn get_artist_id(client: &reqwest::Client) -> Result<HashMap<String, i64>,
 }
 
 impl<'a> Network {
-    async fn new(config: &'a Config, token: &str) -> Result<Network, String> {
+    async fn new(config: &'a WeverseConfig, token: &str) -> Result<Network, String> {
         // create client with appropriate authorization header
         let mut headers = header::HeaderMap::new();
         headers.insert(

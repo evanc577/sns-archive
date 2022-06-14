@@ -1,4 +1,4 @@
-use crate::config::weverse::Config;
+use crate::config::weverse::WeverseConfig;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::error::Error;
@@ -6,7 +6,7 @@ use std::fmt;
 
 #[derive(Clone)]
 pub struct Network {
-    pub config: Config,
+    pub config: WeverseConfig,
     pub client: reqwest::Client,
     pub anon_client: reqwest::Client,
     pub artist_id_map: HashMap<String, i64>,
