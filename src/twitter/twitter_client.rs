@@ -141,7 +141,7 @@ impl<'a> TwitterClient<'a> {
     }
 
     pub async fn process_user(&self, user: &str) -> Result<Vec<Tweet>> {
-        let path = Path::new(&self.config.directory).join(user);
+        let path = Path::new(&self.config.download_path).join(user);
         let start = match std::fs::read_dir(path) {
             Err(_) => None,
             Ok(i) => i

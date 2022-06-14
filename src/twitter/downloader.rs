@@ -97,7 +97,7 @@ impl<'a> DownloadClient<'a> {
 
         // Generate base name
         let base_name = format!("{}_{}_{}", date, &tweet.id, &tweet.user.screen_name);
-        let target_dir = Path::new(&self.config.directory)
+        let target_dir = Path::new(&self.config.download_path)
             .join(&tweet.user.screen_name)
             .join(&base_name);
 

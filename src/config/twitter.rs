@@ -5,7 +5,7 @@ use serde::{Deserialize, Deserializer};
 pub struct TwitterConfig {
     pub bearer: String,
     #[serde(deserialize_with = "deserialize_directory")]
-    pub directory: String,
+    pub download_path: String,
     pub users: Vec<String>,
     #[serde(default)]
     pub timezone_offset: i32,

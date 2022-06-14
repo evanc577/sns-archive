@@ -1,32 +1,43 @@
-# download-weverse
+# sns-archive
 
-Batach download Weverse posts and moments
+Unified SNS archiver
 
-![Terminal screencast](term.svg)
+Currently supports:
+
+* Twitter
+* Weverse
+* Youtube
 
 ## Usage
 
-1. Log onto Weverse in your web browser and click on some artist posts and moments.
+Create a config file `$XDG_CONFIG_DIR/snsarchive/config.toml`
 
-2. Save `weverse.io` cookies in netscape format. Use [Export Cookies](https://addons.mozilla.org/en-US/firefox/addon/export-cookies-txt/) extension for Firefox, or [Get cookies.txt](https://chrome.google.com/webstore/detail/get-cookiestxt/bgaddhkoddajcdgocldbbfleckgcbcid?hl=en) extension for Chrome(ium).
-
-2. Create a `config.toml` file in the same directory as the executable:
+Sample:
 
 ```toml
-cookies_file = "cookies-weverse-io.txt" # path to your cookies file from step 2
-max_connections = 20 # limit to 20 simultaneous network connections
+[weverse]
+cookies_file = "" # Cookies file for weverse.io in netscape format
+max_connections = 20
 
-[artists.dreamcatcher]
-artist_download_path = "posts/dreamcatcher/artist"
-moments_download_path = "posts/dreamcatcher/moments"
-# Downloads all artist posts and moments for dreamcatcher
-
-[artists.sunmi]
-artist_download_path = "posts/sunmi/artist"
-moments_download_path = "posts/sunmi/moments"
-# Only download 10 most recent artist posts and moments for sunmi
+[weverse.artists.dreamcatcher]
+artist_download_path = "sns/weverse/artist"
+moments_download_path = "sns/weverse/moments"
+videos_download_path = "sns/weverse/videos"
 recent_artist = 10
 recent_moments = 10
-```
 
-4. Run the program.
+[twitter]
+bearer = "" # Twitter API bearer token
+download_path = "sns/twitter"
+timezone_offset = 32400
+users = [
+    "hf_dreamcatcher",
+]
+
+[youtube]
+download_path = "sns/youtube"
+filter = "dreamcatcher|(dream catcher)|드림캐쳐"
+channels = [
+    { channel_id = "UCxGkExhl-tIwOt7E-DoVJWg", display_name = "seezn", apply_filter = true },
+]
+```
