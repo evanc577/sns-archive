@@ -17,6 +17,7 @@ scraper = "0.13"
 tempfile = "3.3"
 url = "2.2"
 unicode-segmentation = "1.9"
+infer = "0.8"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

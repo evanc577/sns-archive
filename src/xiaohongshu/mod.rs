@@ -47,6 +47,7 @@ struct XHSAdaptiveVideo {
     url: String,
 }
 
+#[allow(dead_code)]
 #[derive(Deserialize, Debug)]
 struct XHSUser {
     nickname: String,
@@ -70,7 +71,6 @@ where
 
 pub async fn download(json_file: impl AsRef<Path>, config: XiaoHongShuConfig) -> Result<()> {
     // Parse JSON
-    dbg!(json_file.as_ref());
     let s = fs::read_to_string(json_file.as_ref()).await?;
     let parsed: XHSResponse = serde_json::from_str(&s)?;
 
@@ -90,11 +90,27 @@ async fn download_post(post: XHSNote, dir: impl AsRef<Path>) -> Result<()> {
     let user_dir = dir.as_ref().join(&post.user.nickname);
     fs::create_dir_all(&user_dir).await?;
 
+    // Check if already downloaded
+    for direntry in std::fs::read_dir(&user_dir)?.flatten() {
+        if direntry.file_name().to_string_lossy().contains(&post.id) {
+            return Ok(());
+        }
+    }
+
     // Create post directory
     let prefix = {
+        // Query user for date
+        println!(
+            "Enter date for {} - {} - {}",
+            &post.id, &post.user.nickname, &post.display_title
+        );
+        let mut date_buffer = String::new();
+        let stdin = std::io::stdin();
+        stdin.read_line(&mut date_buffer)?;
+
         let x = sanitize_filename::sanitize(format!(
-            "{}-{}-{}",
-            &post.user.nickname, &post.id, &post.display_title
+            "{}-{}-{}-{}",
+            &date_buffer, &post.user.nickname, &post.id, &post.display_title
         ));
         let truncated: String = UnicodeSegmentation::grapheme_indices(x.as_str(), true)
             .filter_map(|(i, x)| if i < 150 { Some(x) } else { None })
@@ -102,14 +118,11 @@ async fn download_post(post: XHSNote, dir: impl AsRef<Path>) -> Result<()> {
         truncated
     };
     let post_dir = user_dir.join(&prefix);
-    if post_dir.exists() {
-        return Ok(());
-    }
     fs::create_dir_all(&post_dir).await?;
 
     // Download images
     for (i, image) in post.images_list.into_iter().enumerate() {
-        let filename = format!("{}-img{:02}.jpg", &prefix, i + 1);
+        let filename = format!("{}-img{:02}", &prefix, i + 1);
         let path = post_dir.join(&filename);
         download_file(image.url, path).await?;
     }
@@ -121,7 +134,7 @@ async fn download_post(post: XHSNote, dir: impl AsRef<Path>) -> Result<()> {
             .into_iter()
             .max_by_key(|x| x.avg_bitrate)
             .ok_or_else(|| anyhow::anyhow!("No videos found"))?;
-        let filename = format!("{}-vid.mp4", &prefix);
+        let filename = format!("{}-vid", &prefix);
         let path = post_dir.join(&filename);
         download_file(best_video.url, path).await?;
     }
@@ -143,7 +156,8 @@ async fn download_post(post: XHSNote, dir: impl AsRef<Path>) -> Result<()> {
 
 async fn download_file(url: impl AsRef<str>, path: impl AsRef<Path>) -> Result<()> {
     let data = reqwest::get(url.as_ref()).await?.bytes().await?;
-    let mut file = fs::File::create(path.as_ref()).await?;
+    let kind = infer::get(&data).ok_or_else(|| anyhow::anyhow!("Unknown file type"))?;
+    let mut file = fs::File::create(path.as_ref().with_extension(kind.extension())).await?;
     file.write_all(&data).await?;
 
     Ok(())
