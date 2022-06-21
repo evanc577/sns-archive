@@ -31,6 +31,14 @@ enum Sns {
     },
     Weverse,
     Youtube,
+    NaverPost,
+    XiaoHongShu {
+        /// API response from XiaoHongShu app from endpoint
+        /// https://edith.xiaohongshu.com/api/sns/v4/note/user/posted
+        /// Need to sniff app traffic
+        #[clap(value_parser)]
+        json_file: PathBuf,
+    }
 }
 
 fn default_config_path() -> PathBuf {
@@ -80,6 +88,22 @@ async fn run() -> Result<()> {
                 sns_archive::youtube::download(conf)?;
             } else {
                 return Err(anyhow!("Missing youtube section in config file"));
+            }
+        }
+        Sns::NaverPost => {
+            if let Some(conf) = conf.naver_post {
+                sns_archive::naver_post::download_members(conf.members).await?;
+            } else {
+                return Err(anyhow!("Missing naver post section in config file"));
+            }
+        }
+        Sns::XiaoHongShu {
+            json_file: f,
+        } => {
+            if let Some(conf) = conf.xiaohongshu {
+                sns_archive::xiaohongshu::download(f, conf).await?;
+            } else {
+                return Err(anyhow!("Missing xiaohongshu section in config file"));
             }
         }
     }
