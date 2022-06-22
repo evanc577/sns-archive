@@ -1,12 +1,18 @@
 use std::path::Path;
+use std::process::Stdio;
+use std::time::Duration;
 
 use anyhow::Result;
 use serde::{Deserialize, Deserializer};
-use tokio::fs;
+use thirtyfour::prelude::*;
+use thirtyfour::CapabilitiesHelper;
 use tokio::io::AsyncWriteExt;
+use tokio::{fs, process, time};
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::config::xiaohongshu::XiaoHongShuConfig;
+
+static DRIVER_ADDR: &str = "http://localhost:4444";
 
 #[derive(Deserialize, Debug)]
 struct XHSResponse {
@@ -77,15 +83,36 @@ pub async fn download(json_file: impl AsRef<Path>, config: XiaoHongShuConfig) ->
     // Create directory
     fs::create_dir_all(&config.download_path).await?;
 
+    // Create selenium driver
+    let _driver = process::Command::new("geckodriver")
+        .arg("--port=4444")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .kill_on_drop(true)
+        .spawn()?;
+    let mut caps = DesiredCapabilities::firefox();
+    caps.set("pageLoadStrategy".into(), serde_json::json!("none"));
+    let driver = loop {
+        match WebDriver::new(DRIVER_ADDR, caps.clone()).await {
+            Ok(d) => break d,
+            _ => time::sleep(Duration::from_secs(1)).await,
+        }
+        println!("Waiting for driver...");
+    };
+
     // Download posts
     for post in parsed.data.notes {
-        download_post(post, &config.download_path).await?;
+        download_post(&driver, post, &config.download_path).await?;
     }
+
+    // Close window
+    driver.close().await?;
+    driver.quit().await?;
 
     Ok(())
 }
 
-async fn download_post(post: XHSNote, dir: impl AsRef<Path>) -> Result<()> {
+async fn download_post(driver: &WebDriver, post: XHSNote, dir: impl AsRef<Path>) -> Result<()> {
     // Create user directory
     let user_dir = dir.as_ref().join(&post.user.nickname);
     fs::create_dir_all(&user_dir).await?;
@@ -99,18 +126,23 @@ async fn download_post(post: XHSNote, dir: impl AsRef<Path>) -> Result<()> {
 
     // Create post directory
     let prefix = {
-        // Query user for date
-        println!(
-            "Enter date for {} - {} - {}",
-            &post.id, &post.user.nickname, &post.display_title
-        );
-        let mut date_buffer = String::new();
-        let stdin = std::io::stdin();
-        stdin.read_line(&mut date_buffer)?;
-
+        let date = match get_date(driver, &post.id).await {
+            Ok(d) => d,
+            _ => {
+                // Query user for date
+                println!(
+                    "Enter date for {} - {} - {}",
+                    &post.id, &post.user.nickname, &post.display_title
+                );
+                let mut date_buffer = String::new();
+                let stdin = std::io::stdin();
+                stdin.read_line(&mut date_buffer)?;
+                date_buffer
+            }
+        };
         let x = sanitize_filename::sanitize(format!(
             "{}-{}-{}-{}",
-            &date_buffer, &post.user.nickname, &post.id, &post.display_title
+            &date, &post.user.nickname, &post.id, &post.display_title
         ));
         let truncated: String = UnicodeSegmentation::grapheme_indices(x.as_str(), true)
             .filter_map(|(i, x)| if i < 150 { Some(x) } else { None })
@@ -141,7 +173,10 @@ async fn download_post(post: XHSNote, dir: impl AsRef<Path>) -> Result<()> {
 
     // Write content file
     {
-        let link = format!("https://www.xiaohongshu.com/discovery/item/{}", post.id);
+        let link = format!(
+            "https://www.xiaohongshu.com/discovery/item/{}?xhsshare=CopyLink",
+            post.id
+        );
         let file_contents = format!("{}\n{}\n\n{}", link, post.user.nickname, post.desc);
         let filename = format!("{}-content.txt", &prefix);
         let path = post_dir.join(&filename);
@@ -161,4 +196,35 @@ async fn download_file(url: impl AsRef<str>, path: impl AsRef<Path>) -> Result<(
     file.write_all(&data).await?;
 
     Ok(())
+}
+
+async fn get_date(driver: &WebDriver, id: &str) -> Result<String> {
+    // Visit webpage
+    driver.get("about:blank").await?;
+    driver
+        .get(format!(
+            "https://www.xiaohongshu.com/discovery/item/{}?xhsshare=CopyLink",
+            id
+        ))
+        .await?;
+
+    // Wait until date loads
+    let date = loop {
+        if driver.current_url().await?.as_str().contains("captcha") {
+            return Err(anyhow::anyhow!("Captcha page"));
+        }
+        match driver.find_element(By::ClassName("publish-date")).await {
+            Ok(e) => break e.text().await?,
+            _ => time::sleep(Duration::from_secs(1)).await,
+        }
+    };
+
+    // Parse date
+    let re = regex::Regex::new(r"\d{4}-\d{2}-\d{2}")?;
+    let m = re
+        .find(&date)
+        .ok_or_else(|| anyhow::anyhow!("Could not parse date {}", &date))?;
+    let date_str = m.as_str().replace('-', "").split_off(2);
+
+    Ok(date_str)
 }
