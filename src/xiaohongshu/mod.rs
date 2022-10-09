@@ -44,7 +44,8 @@ struct XHSImage {
 #[derive(Deserialize, Debug)]
 struct XHSVideo {
     #[serde(rename = "adaptive_streaming_url_set")]
-    adaptive_videos: Vec<XHSAdaptiveVideo>,
+    adaptive_videos: Option<Vec<XHSAdaptiveVideo>>,
+    url: Option<String>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -161,14 +162,20 @@ async fn download_post(driver: &WebDriver, post: XHSNote, dir: impl AsRef<Path>)
 
     // Download video
     if let Some(v) = post.video_info {
-        let best_video = v
-            .adaptive_videos
-            .into_iter()
-            .max_by_key(|x| x.avg_bitrate)
-            .ok_or_else(|| anyhow::anyhow!("No videos found"))?;
+        let url = if let Some(v) = v.adaptive_videos {
+            v
+                .into_iter()
+                .max_by_key(|x| x.avg_bitrate)
+                .ok_or_else(|| anyhow::anyhow!("No videos found"))?
+                .url
+        } else if let Some(u) = v.url {
+            u
+        } else {
+            panic!("No video available");
+        };
         let filename = format!("{}-vid", &prefix);
         let path = post_dir.join(&filename);
-        download_file(best_video.url, path).await?;
+        download_file(url, path).await?;
     }
 
     // Write content file
