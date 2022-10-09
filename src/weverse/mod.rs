@@ -1,445 +1,94 @@
-use std::collections::HashMap;
-use std::convert::TryFrom;
-use std::fs::{self, File};
-use std::io::prelude::*;
+use std::fs::File;
+use std::io;
+use std::io::{BufRead, Write};
 use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::process::Stdio;
+use std::time::Duration;
 
-use chrono::DateTime;
-use futures::stream::{self, StreamExt};
-use reqwest::header;
-use serde::Deserialize;
-use tokio::io;
+use anyhow::Result;
+use serde::{Deserialize, Deserializer};
+use thirtyfour::cookie::Cookie;
+use thirtyfour::prelude::*;
+use thirtyfour::{CapabilitiesHelper, DesiredCapabilities, FirefoxCapabilities, WebDriver};
+use tokio::io::AsyncWriteExt;
+use tokio::{fs, process, time};
+use unicode_segmentation::UnicodeSegmentation;
 
-use crate::config::weverse::{WeverseConfig, read_token};
-use self::network_structs::*;
-use self::urls::*;
+use crate::config::weverse::WeverseConfig;
 
-mod network_structs;
-mod urls;
+static DRIVER_ADDR: &str = "http://localhost:4444";
 
-fn get_prefix(post: &Post) -> String {
-    let date = DateTime::parse_from_rfc3339(&post.created_at)
-        .unwrap()
-        .format("%Y%m%d");
-    let id = post.id.to_string();
-    let user = &post.community_user.nickname;
-    sanitize_filename::sanitize(format!("{}-{}-{}", date, id, user))
-}
-
-fn post_dir_exists(dir: impl AsRef<Path>, prefix: &str) -> bool {
-    let start = prefix.splitn(3, '-').take(2).collect::<Vec<_>>().join("-");
-    let paths = match fs::read_dir(dir) {
-        Ok(p) => p,
-        Err(_) => return false,
+pub async fn download(config: &WeverseConfig) -> Result<()> {
+    let _driver = process::Command::new("geckodriver")
+        .arg("--port=4444")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .kill_on_drop(true)
+        .spawn()?;
+    let mut caps = DesiredCapabilities::firefox();
+    caps.set("pageLoadStrategy".into(), serde_json::json!("none"));
+    let driver = loop {
+        match WebDriver::new(DRIVER_ADDR, caps.clone()).await {
+            Ok(d) => break d,
+            _ => time::sleep(Duration::from_secs(1)).await,
+        }
+        println!("Waiting for driver...");
     };
 
-    for cur_path in paths {
-        let cur_path = match cur_path {
-            Ok(p) => p,
-            Err(_) => continue,
-        };
-        let cur_start = cur_path
-            .file_name()
-            .to_string_lossy()
-            .splitn(3, '-')
-            .take(2)
-            .collect::<Vec<_>>()
-            .join("-");
-        if cur_start == start {
-            return true;
-        }
-    }
+    login(&driver, &config.cookies_file).await?;
+    open_page(&driver).await?;
 
-    false
-}
-
-fn get_url(post: &Post) -> String {
-    POST_URL
-        .replace(
-            "{artist}",
-            post.community.name.to_string().to_lowercase().as_str(),
-        )
-        .replace("{post_id}", post.id.to_string().as_str())
-}
-
-pub async fn download(conf: &WeverseConfig) -> Result<(), String> {
-    let token = read_token(&conf.cookies_file)?;
-    let n = Network::new(conf, &token).await?;
-
-    // get a list of all posts to download
-    println!("Getting all post info...");
-    let artist_iter = conf
-        .artists
-        .iter()
-        .map(|(k, v)| n.download_posts_info(&v.recent_artist, k.to_owned(), PostType::Artist));
-    let moments_iter = conf
-        .artists
-        .iter()
-        .map(|(k, v)| n.download_posts_info(&v.recent_moments, k.to_owned(), PostType::Moment));
-    let posts = stream::iter(artist_iter.chain(moments_iter))
-        .buffer_unordered(conf.max_connections)
-        .collect::<Vec<Result<Vec<_>, _>>>()
-        .await
-        .into_iter()
-        .collect::<Result<Vec<Vec<_>>, _>>()
-        .map_err(|e| format!("Error collecting posts info: {}", e))?
-        .into_iter()
-        .flatten();
-
-    let mtx = Arc::new(Mutex::new(()));
-    let posts_iter = posts.map(|p| n.download_post(p, mtx.clone()));
-    let mut downloads = stream::iter(posts_iter).buffer_unordered(conf.max_connections);
-
-    // spawn a new thread to manage printing to stdout
-    let (tx, rx) = std::sync::mpsc::channel::<String>();
-    {
-        let mtx = mtx.clone();
-        tokio::spawn(async move {
-            loop {
-                match rx.recv() {
-                    Ok(s) => {
-                        let guard = mtx.lock().unwrap();
-                        println!("{}", s);
-                        std::mem::drop(guard);
-                    }
-                    Err(_) => return,
-                }
-            }
-        });
-    }
-
-    while let Some(result) = downloads.next().await {
-        match result {
-            Ok(DownloadOk::Downloaded(p)) => {
-                tx.send(format!("Downloaded {}", get_url(&p))).unwrap()
-            }
-            Err(DownloadErr::ResponseErr(_, post, reqwest::StatusCode::FORBIDDEN)) => {
-                tx.send(format!("Wrong password for {}", get_url(&post)))
-                    .unwrap();
-            }
-            _ => (),
-        }
-    }
+    // Close window
+    driver.close().await?;
+    driver.quit().await?;
 
     Ok(())
 }
 
-async fn get_artist_id(client: &reqwest::Client) -> Result<HashMap<String, i64>, String> {
-    #[derive(Deserialize)]
-    struct InfoResp {
-        communities: Vec<Community>,
-    }
-    #[derive(Deserialize)]
-    struct Community {
-        name: String,
-        id: i64,
-    }
+async fn login(driver: &WebDriver, cookies_file: impl AsRef<Path>) -> Result<Vec<Cookie<'_>>> {
+    driver.get("about:blank").await?;
+    driver.get("https://weverse.io").await?;
 
-    let url = API_INFO_URL;
-    let resp = client
-        .get(url)
-        .send()
-        .await
-        .map_err(|e| format!("Error sending info request: {}", e))?;
+    let cookies = if cookies_file.as_ref().exists() {
+        let file = File::open(cookies_file)?;
+        let cookies: Vec<_> = io::BufReader::new(file)
+            .lines()
+            .filter_map(|l| {
+                let line = l.ok()?;
+                Cookie::parse(line).ok()
+            })
+            .collect();
 
-    let info: InfoResp = serde_json::from_str(
-        &resp
-            .text()
-            .await
-            .map_err(|e| format!("Error reading response text for {}: {}", url, e))?,
-    )
-    .map_err(|e| format!("Error parsing json for {}: {}", url, e))?;
+        for cookie in cookies.iter() {
+            driver.add_cookie(cookie.clone()).await?;
+        }
 
-    let artist_id_map: HashMap<String, i64> = info
-        .communities
-        .iter()
-        .map(|c| (c.name.to_lowercase(), c.id))
-        .collect();
-    Ok(artist_id_map)
+        cookies
+    } else {
+        // Let user log in
+        let cookies = loop {
+            let cookies = driver.get_cookies().await?;
+            if cookies.iter().any(|c| c.name() == "we2_access_token") {
+                break cookies;
+            }
+
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        };
+
+        // Save cookies to file
+        let mut file = File::create(cookies_file)?;
+        for cookie in cookies.iter() {
+            writeln!(&mut file, "{}", cookie)?;
+        }
+
+        cookies
+    };
+
+    Ok(cookies)
 }
 
-impl<'a> Network {
-    async fn new(config: &'a WeverseConfig, token: &str) -> Result<Network, String> {
-        // create client with appropriate authorization header
-        let mut headers = header::HeaderMap::new();
-        headers.insert(
-            header::AUTHORIZATION,
-            header::HeaderValue::from_str(&format!("Bearer {}", &token)[..])
-                .map_err(|e| format!("Error constructing request header: {}", e))?,
-        );
-        let client = reqwest::Client::builder()
-            .default_headers(headers)
-            .build()
-            .map_err(|e| format!("Error building request client: {}", e))?;
-        let anon_client = reqwest::Client::builder()
-            .build()
-            .map_err(|e| format!("Error building request client: {}", e))?;
-        println!("Getting artist ids...");
-        let artist_id_map = get_artist_id(&anon_client).await?;
-
-        let n = Network {
-            config: config.clone(),
-            client,
-            anon_client,
-            artist_id_map,
-        };
-        Ok(n)
-    }
-
-    async fn download_posts_info(
-        &self,
-        recent: &Option<isize>,
-        artist: String,
-        post_type: PostType,
-    ) -> Result<Vec<Post>, DownloadErr> {
-        let artist_id = self
-            .artist_id_map
-            .get(&artist[..])
-            .ok_or(DownloadErr::ArtistMapErr(artist))?;
-
-        // set up loop variables
-        let mut from = String::from("");
-        let mut count: isize = 0;
-        let url = match post_type {
-            PostType::Artist => API_ARTIST_TAB,
-            PostType::Moment => API_TO_FANS,
-        }
-        .replace("{artist_id}", &artist_id.to_string()[..]);
-
-        // return value
-        let mut ret: Vec<Post> = Vec::new();
-
-        loop {
-            // build request
-            let page_size: String = match recent {
-                Some(v) => {
-                    if v <= &0 {
-                        break;
-                    }
-                    std::cmp::max(1, v - count).to_string()
-                }
-                None => String::from("100"),
-            };
-            let params = [("pageSize", &page_size), ("from", &from)];
-
-            // send request
-            let resp = self
-                .client
-                .get(&url)
-                .query(&params)
-                .send()
-                .await
-                .map_err(|e| DownloadErr::RequestErr(url.clone(), e))?;
-
-            // parse response
-            let text = &resp
-                .text()
-                .await
-                .map_err(|e| DownloadErr::ResponseTextErr(url.clone(), e))?;
-            let posts_resp: Posts = serde_json::from_str(text)
-                .map_err(|e| DownloadErr::ResponseJsonErr(url.clone(), e))?;
-            let posts = &posts_resp.posts;
-            let num_posts = isize::try_from(posts.len()).unwrap();
-
-            // add to return vector
-            ret.extend(posts_resp.posts);
-
-            // determine if we need to keep looping
-            if posts_resp.is_ended {
-                break;
-            }
-            match recent {
-                Some(v) => {
-                    count += num_posts;
-                    if v - count <= 0 {
-                        break;
-                    }
-                }
-                None => (),
-            }
-            from = posts_resp
-                .last_id
-                .ok_or(DownloadErr::LastIdErr)?
-                .to_string();
-        }
-        Ok(ret)
-    }
-
-    async fn download_post(
-        &self,
-        mut post: Post,
-        mtx: Arc<Mutex<()>>,
-    ) -> Result<DownloadOk, DownloadErr> {
-        let prefix = get_prefix(&post);
-
-        // create download directory
-        let artist = post.community.name.to_lowercase();
-        let artist_config = &self.config.artists.get(&artist).unwrap();
-        let download_dir = match post.post_type.to_lowercase().as_str() {
-            "normal" => artist_config.artist_download_path.clone(),
-            "to_fans" => artist_config.moments_download_path.clone(),
-            _ => return Err(DownloadErr::ParsePostTypeErr(post.post_type.to_string())),
-        };
-        let dir = download_dir.join(&prefix);
-        let temp_dir = download_dir.join(prefix.clone() + ".temp");
-
-        // don't download if directory exists
-        if fs::metadata(&dir).is_ok() {
-            return Ok(DownloadOk::Skipped(post.clone()));
-        }
-        if post_dir_exists(download_dir, &prefix) {
-            return Ok(DownloadOk::Skipped(post.clone()));
-        }
-
-        if post.locked || post.attached_videos.is_some() {
-            post = self.download_post_info(&post, mtx).await?;
-        }
-
-        // recreate temp directory
-        let _ = fs::remove_dir_all(&temp_dir);
-        let _ = fs::remove_file(&temp_dir);
-        let _ = fs::create_dir_all(&temp_dir).map_err(|e| {
-            format!(
-                "Error could not create directory {:?}: {}",
-                &temp_dir,
-                e
-            )
-        });
-
-        // download photos
-        if let Some(photos) = &post.photos {
-            for (i, photo) in photos.iter().enumerate() {
-                let ext = match photo.url.rfind('.') {
-                    Some(ext_idx) => &photo.url[ext_idx..],
-                    None => "",
-                };
-                let filename = format!("{}-img{:02}{}", prefix, i, ext);
-                let save_path = temp_dir.join(filename);
-                self.download_direct(&photo.url, &save_path).await?
-            }
-        }
-
-        // download videos
-        if let Some(videos) = &post.attached_videos {
-            for (i, video) in videos.iter().enumerate() {
-                if let Some(video_url) = &video.video_url {
-                    let ext = match video_url.rfind('.') {
-                        Some(ext_idx) => &video_url[ext_idx..],
-                        None => "",
-                    };
-                    let filename = format!("{}-vid{:02}{}", prefix, i, ext);
-                    let save_path = temp_dir.join(filename);
-                    self.download_direct(video_url, &save_path).await?;
-                }
-            }
-        }
-
-        // write contents
-        {
-            let filename = format!("{}-content.txt", prefix);
-            let save_path = temp_dir.join(filename);
-            let body = match &post.body {
-                Some(v) => v.as_str(),
-                None => "",
-            };
-            let content = format!(
-                "https://weverse.io/{}/artist/{}\n{} ({}):\n{}",
-                post.community.name.to_lowercase(),
-                post.id,
-                &post.community_user.nickname,
-                &post.created_at,
-                body
-            );
-            let mut buffer = File::create(&save_path)
-                .map_err(|e| DownloadErr::FileCreateErr(save_path.to_string_lossy().into_owned(), e))?;
-            buffer
-                .write_all(content.as_bytes())
-                .map_err(|e| DownloadErr::FileWriteErr(save_path.to_string_lossy().into_owned(), e))?;
-        }
-
-        // rename temp directory
-        let _ = fs::rename(&temp_dir, &dir).map_err(|e| DownloadErr::RenameErr(temp_dir.to_string_lossy().into_owned(), e))?;
-
-        Ok(DownloadOk::Downloaded(post.clone()))
-    }
-
-    async fn download_post_info(
-        &self,
-        post: &'a Post,
-        mtx: Arc<Mutex<()>>,
-    ) -> Result<Post, DownloadErr> {
-        let url = API_POST_URL
-            .replace("{artist_id}", post.community.id.to_string().as_str())
-            .replace("{post_id}", post.id.to_string().as_str());
-
-        let resp = if post.locked {
-            let guard = mtx.lock().unwrap();
-            // query user for password
-            let shown_url = POST_URL
-                .replace("{artist}", post.community.name.to_string().as_str())
-                .replace("{post_id}", post.id.to_string().as_str());
-            println!("Password required for {}:", shown_url);
-            let password = io::AsyncBufReadExt::lines(io::BufReader::new(io::stdin()))
-                .next_line()
-                .await
-                .map_err(DownloadErr::StdinErrStr)?
-                .ok_or(DownloadErr::StdinErr)?;
-
-            std::mem::drop(guard);
-
-            let json: HashMap<&str, &str> = [("lockPassword", password.as_str())]
-                .iter()
-                .cloned()
-                .collect();
-
-            self.client
-                .post(&url)
-                .json(&json)
-                .send()
-                .await
-                .map_err(|e| DownloadErr::RequestErr(url.clone(), e))?
-        } else {
-            self.client
-                .get(&url)
-                .send()
-                .await
-                .map_err(|e| DownloadErr::RequestErr(url.clone(), e))?
-        };
-
-        // parse response
-        if !resp.status().is_success() {
-            return Err(DownloadErr::ResponseErr(
-                url.clone(),
-                Box::new(post.clone()),
-                resp.status(),
-            ));
-        }
-
-        let text = &resp
-            .text()
-            .await
-            .map_err(|e| DownloadErr::ResponseTextErr(url.clone(), e))?;
-        let post_resp: Post =
-            serde_json::from_str(text).map_err(|e| DownloadErr::ResponseJsonErr(url.clone(), e))?;
-
-        Ok(post_resp)
-    }
-
-    async fn download_direct(&self, url: &str, save_path: impl AsRef<Path>) -> Result<(), DownloadErr> {
-        let data = self
-            .anon_client
-            .get(url)
-            .send()
-            .await
-            .map_err(|e| DownloadErr::RequestErr(url.to_string(), e))?
-            .bytes()
-            .await
-            .map_err(|e| DownloadErr::ResponseBytesErr(url.to_string(), e))?;
-        let mut buffer = File::create(&save_path)
-            .map_err(|e| DownloadErr::FileCreateErr(save_path.as_ref().to_string_lossy().into_owned(), e))?;
-        buffer
-            .write_all(&data)
-            .map_err(|e| DownloadErr::FileWriteErr(save_path.as_ref().to_string_lossy().into_owned(), e))
-    }
+async fn open_page(driver: &WebDriver) -> Result<()> {
+    driver.get("https://weverse.io/dreamcatcher/artist").await?;
+    tokio::time::sleep(Duration::from_secs(1000000)).await;
+    Ok(())
 }
