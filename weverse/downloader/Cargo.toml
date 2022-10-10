@@ -1,3 +1,5 @@
+cargo-features = ["workspace-inheritance"]
+
 [package]
 name = "weverse_vod_downloader"
 version = "0.1.0"

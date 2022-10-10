@@ -1,5 +1,6 @@
-[workspace]
+cargo-features = ["workspace-inheritance"]
 
+[workspace]
 members = ["weverse", "weverse/downloader", "sns-archive"]
 
 [workspace.dependencies]

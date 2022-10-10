@@ -1,3 +1,5 @@
+cargo-features = ["workspace-inheritance"]
+
 [package]
 name = "sns-archive"
 version = "0.1.0"
@@ -30,7 +32,6 @@ features = ["derive"]
 workspace = true
 default-features = false
 features = ["std"]
-# default-features = false
 
 [dependencies.lazy_static]
 workspace = true
