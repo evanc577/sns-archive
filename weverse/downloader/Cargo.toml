@@ -1,0 +1,19 @@
+[package]
+name = "weverse_vod_downloader"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+futures = { workspace = true }
+indicatif = { workspace = true }
+reqwest = { workspace = true, features = ["json", "stream"] }
+lazy_static = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+unicode-segmentation = { workspace = true }
+regex = { workspace = true }
+time = { workspace = true, features = ["formatting"]}
+weverse = { path = "../"}

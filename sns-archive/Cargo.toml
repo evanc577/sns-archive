@@ -4,61 +4,70 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0"
-directories = "4.0"
-fs_extra = "1.2"
-futures = "0.3"
-home-dir = "0.1"
-htmlescape = "0.3"
-indicatif = "0.16"
-itertools = "0.10"
-sanitize-filename = "0.4"
-scraper = "0.13"
-tempfile = "3.3"
-url = "2.2"
-unicode-segmentation = "1.9"
-infer = "0.8"
-thirtyfour = "0.29"
+anyhow = { workspace = true }
+directories = { workspace = true }
+fs_extra = { workspace = true }
+futures = { workspace = true }
+home-dir = { workspace = true }
+htmlescape = { workspace = true }
+indicatif = { workspace = true }
+itertools = { workspace = true }
+sanitize-filename = { workspace = true }
+scraper = { workspace = true }
+tempfile = { workspace = true }
+url = { workspace = true }
+unicode-segmentation = { workspace = true }
+infer = { workspace = true }
+thirtyfour = { workspace = true }
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies.clap]
-version = "3.2"
+workspace = true
 features = ["derive"]
 
 [dependencies.chrono]
-version = "0.4"
+workspace = true
 default-features = false
 features = ["std"]
 # default-features = false
 
 [dependencies.lazy_static]
-version = "1.4"
+workspace = true
 default-features = false
 
 [dependencies.regex]
-version = "1.5"
+workspace = true
 default-features = false
 features = ["std"]
 
 [dependencies.reqwest]
-version = "0.11"
+workspace = true
 default-features = false
 features = ["rustls-tls", "json", "stream"]
 
 [dependencies.serde]
-version = "1.0"
+workspace = true
 default-features = false
 features = ["derive"]
 
 [dependencies.serde_json]
-version = "1.0"
+workspace = true
 default-features = false
 
 [dependencies.tokio]
-version = "1.19"
-features = ["macros", "io-util", "io-std", "sync", "time", "rt-multi-thread", "fs", "process"]
+workspace = true
+features = [
+  "macros",
+  "io-util",
+  "io-std",
+  "sync",
+  "time",
+  "rt-multi-thread",
+  "fs",
+  "process",
+]
 
 [dependencies.toml]
-version = "0.5"
+workspace = true
 default-features = false
