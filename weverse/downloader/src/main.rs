@@ -1,4 +1,6 @@
-use std::{fs::File, io::Write, path::PathBuf};
+use std::fs::File;
+use std::io::Write;
+use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::Parser;
@@ -9,7 +11,7 @@ use regex::Regex;
 use reqwest::Client;
 use time::format_description;
 use unicode_segmentation::UnicodeSegmentation;
-use weverse::{vod_info, VodInfo};
+use weverse::endpoint::vod::{vod_info, VodInfo};
 
 #[derive(Parser)]
 struct Args {

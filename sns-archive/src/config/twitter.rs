@@ -11,4 +11,3 @@ pub struct TwitterConfig {
     #[serde(default)]
     pub timezone_offset: i32,
 }
-

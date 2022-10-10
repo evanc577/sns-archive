@@ -163,8 +163,7 @@ async fn download_post(driver: &WebDriver, post: XHSNote, dir: impl AsRef<Path>)
     // Download video
     if let Some(v) = post.video_info {
         let url = if let Some(v) = v.adaptive_videos {
-            v
-                .into_iter()
+            v.into_iter()
                 .max_by_key(|x| x.avg_bitrate)
                 .ok_or_else(|| anyhow::anyhow!("No videos found"))?
                 .url

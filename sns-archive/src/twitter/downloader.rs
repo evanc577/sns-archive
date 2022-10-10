@@ -1,18 +1,19 @@
-use crate::config::twitter::TwitterConfig;
-use super::response_helpers;
-use super::tweet::Tweet;
+use std::ffi::OsStr;
+use std::path::Path;
 
 use anyhow::{Context, Result};
 use chrono::{offset, DateTime, FixedOffset};
 use futures::stream::StreamExt;
 use itertools::Itertools;
 use reqwest::{Client, ClientBuilder};
-use std::ffi::OsStr;
-use std::path::Path;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 use tokio::time::{sleep, Duration};
 use url::Url;
+
+use super::response_helpers;
+use super::tweet::Tweet;
+use crate::config::twitter::TwitterConfig;
 
 pub struct DownloadClient<'a> {
     client: Client,
@@ -270,7 +271,7 @@ impl<'a> DownloadClient<'a> {
                 .into_iter()
                 .intersperse("\n".to_string())
                 .collect();
-            return Err(DownloadError::new(&err).into())
+            return Err(DownloadError::new(&err).into());
         }
 
         Ok(())

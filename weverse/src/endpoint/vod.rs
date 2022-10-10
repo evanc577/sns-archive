@@ -60,10 +60,17 @@ impl Ord for Encoding {
     }
 }
 
-async fn vod_videos(client: &Client, extension: &ExtensionVideo, secret: &[u8]) -> Result<Vec<Video>> {
+async fn vod_videos(
+    client: &Client,
+    extension: &ExtensionVideo,
+    secret: &[u8],
+) -> Result<Vec<Video>> {
     // Acquire inKey
     let inkey_url = compute_url(
-        &format!("/video/v1.0/vod/{}/inKey?preview=false&appId=be4d79eb8fc7bd008ee82c8ec4ff6fd4&wpf=pc", extension.video_id),
+        &format!(
+            "/video/v1.0/vod/{}/inKey?preview=false&appId=be4d79eb8fc7bd008ee82c8ec4ff6fd4&wpf=pc",
+            extension.video_id
+        ),
         secret,
     )
     .await?;

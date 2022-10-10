@@ -1,5 +1,6 @@
-use serde::{Deserialize, Deserializer};
 use std::cmp::Ordering;
+
+use serde::{Deserialize, Deserializer};
 
 #[derive(Deserialize, Debug)]
 pub struct Tweet {

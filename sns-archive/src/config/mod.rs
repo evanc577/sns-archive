@@ -15,8 +15,8 @@ use self::youtube::YoutubeConfig;
 pub mod naver_post;
 pub mod twitter;
 pub mod weverse;
-pub mod youtube;
 pub mod xiaohongshu;
+pub mod youtube;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {

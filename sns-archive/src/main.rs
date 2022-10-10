@@ -38,7 +38,7 @@ enum Sns {
         /// Need to sniff app traffic
         #[clap(value_parser)]
         json_file: PathBuf,
-    }
+    },
 }
 
 fn default_config_path() -> PathBuf {
@@ -97,9 +97,7 @@ async fn run() -> Result<()> {
                 return Err(anyhow!("Missing naver post section in config file"));
             }
         }
-        Sns::XiaoHongShu {
-            json_file: f,
-        } => {
+        Sns::XiaoHongShu { json_file: f } => {
             if let Some(conf) = conf.xiaohongshu {
                 sns_archive::xiaohongshu::download(f, conf).await?;
             } else {

@@ -1,5 +1,6 @@
-use reqwest::{Response, StatusCode};
 use std::time::UNIX_EPOCH;
+
+use reqwest::{Response, StatusCode};
 use tokio::time::Duration;
 
 static RESET_HEADER: &str = "x-rate-limit-reset";
