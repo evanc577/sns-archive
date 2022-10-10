@@ -4,6 +4,7 @@ use serde::{Deserialize, Deserializer};
 use time::OffsetDateTime;
 
 use crate::auth::{compute_url, get_secret};
+use crate::endpoint::APP_ID;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -68,8 +69,8 @@ async fn vod_videos(
     // Acquire inKey
     let inkey_url = compute_url(
         &format!(
-            "/video/v1.0/vod/{}/inKey?preview=false&appId=be4d79eb8fc7bd008ee82c8ec4ff6fd4&wpf=pc",
-            extension.video_id
+            "/video/v1.0/vod/{}/inKey?preview=false&appId={}&wpf=pc",
+            extension.video_id, APP_ID
         ),
         secret,
     )
@@ -158,7 +159,14 @@ pub async fn vod_info(client: &Client, vod_id: &str) -> Result<VodInfo> {
     let secret = get_secret(client).await?;
 
     // Get VOD info
-    let url = compute_url(&format!("/post/v1.0/post-{}?fieldSet=postV1&appId=be4d79eb8fc7bd008ee82c8ec4ff6fd4&language=en&platform=WEB&wpf=pc", vod_id), &secret).await?;
+    let url = compute_url(
+        &format!(
+            "/post/v1.0/post-{}?fieldSet=postV1&appId={}&language=en&platform=WEB&wpf=pc",
+            vod_id, APP_ID
+        ),
+        &secret,
+    )
+    .await?;
     let resp = client
         .get(url.as_str())
         .header(header::REFERER, "https://weverse.io/")

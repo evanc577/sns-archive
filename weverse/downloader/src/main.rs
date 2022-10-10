@@ -57,19 +57,23 @@ async fn main() -> Result<()> {
         .ok_or(Error::InvalidUrl)?
         .as_str();
 
+    // Fetch VOD info
     let client = Client::new();
     let info = vod_info(&client, post_id).await?;
 
+    // Create output file
     let output = match args.output {
         Some(p) => p,
         None => gen_file_name(&info),
     };
     let mut file = File::create(output)?;
 
+    // Select best quality
     let video = info.videos.into_iter().max().ok_or(Error::NoVods)?;
     let resp = client.get(&video.source).send().await?;
     let total_size = resp.content_length().ok_or(Error::NoSize)?;
 
+    // Initialize progress bar
     let pb = ProgressBar::new(total_size);
     pb.set_style(ProgressStyle::default_bar()
         .template("{msg}\n{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})")?
@@ -77,6 +81,7 @@ async fn main() -> Result<()> {
     pb.set_message(format!("Downloading {}", info.title));
     let mut downloaded = 0;
 
+    // Download file
     let mut stream = resp.bytes_stream();
     while let Some(b) = stream.next().await {
         let chunk = b?;
