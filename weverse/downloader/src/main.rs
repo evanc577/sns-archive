@@ -11,7 +11,8 @@ use regex::Regex;
 use reqwest::Client;
 use time::format_description;
 use unicode_segmentation::UnicodeSegmentation;
-use weverse::endpoint::vod::{vod_info, VodInfo};
+use weverse::endpoint::vod::VodInfo;
+use weverse::WeverseClient;
 
 #[derive(Parser)]
 struct Args {
@@ -58,8 +59,9 @@ async fn main() -> Result<()> {
         .as_str();
 
     // Fetch VOD info
-    let client = Client::new();
-    let info = vod_info(&client, post_id).await?;
+    let reqwest_client = Client::new();
+    let weverse_client = WeverseClient::new(&reqwest_client);
+    let info = weverse_client.vod_info(post_id).await?;
 
     // Create output file
     let output = match args.output {
@@ -70,7 +72,7 @@ async fn main() -> Result<()> {
 
     // Select best quality
     let video = info.videos.into_iter().max().ok_or(Error::NoVods)?;
-    let resp = client.get(&video.source).send().await?;
+    let resp = reqwest_client.get(&video.source).send().await?;
     let total_size = resp.content_length().ok_or(Error::NoSize)?;
 
     // Initialize progress bar

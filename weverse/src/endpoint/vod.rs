@@ -22,10 +22,14 @@ struct Videos {
     list: Vec<Video>,
 }
 
-#[derive(Deserialize, PartialEq, Eq, Debug)]
+/// VOD video information
+#[derive(Deserialize, PartialEq, Eq, Clone, Debug)]
 pub struct Video {
+    /// Source URL
     pub source: String,
+    /// File size in bytes
     pub size: u64,
+    /// Video encoding
     #[serde(rename = "encodingOption")]
     pub encoding: Encoding,
 }
@@ -42,9 +46,12 @@ impl PartialOrd for Video {
     }
 }
 
-#[derive(Deserialize, PartialEq, Eq, Debug)]
+/// Video encode settings
+#[derive(Deserialize, PartialEq, Eq, Clone, Debug)]
 pub struct Encoding {
+    /// Video width in pixels
     pub width: u64,
+    /// Video height in pixels
     pub height: u64,
 }
 
@@ -104,7 +111,8 @@ async fn vod_videos(
     Ok(videos)
 }
 
-#[derive(Debug)]
+/// General VOD info
+#[derive(Debug, Clone)]
 pub struct VodInfo {
     pub title: String,
     pub id: String,
@@ -155,7 +163,7 @@ struct ExtensionVideo {
     video_id: u64,
 }
 
-pub async fn vod_info(client: &Client, vod_id: &str) -> Result<VodInfo> {
+pub(crate) async fn vod_info(client: &Client, vod_id: &str) -> Result<VodInfo> {
     let secret = get_secret(client).await?;
 
     // Get VOD info
