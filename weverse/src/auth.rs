@@ -74,8 +74,8 @@ lazy_static! {
 
 #[derive(Serialize, Clone, Debug)]
 pub struct LoginInfo {
-    email: String,
-    password: String,
+    pub email: String,
+    pub password: String,
 }
 
 #[derive(Deserialize, Clone, Debug)]

@@ -3,10 +3,9 @@ use reqwest::{header, Client, Url};
 use serde::{Deserialize, Deserializer};
 use time::OffsetDateTime;
 
+use super::REFERER;
 use crate::auth::{compute_url, get_secret};
 use crate::endpoint::APP_ID;
-
-use super::REFERER;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]

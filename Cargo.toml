@@ -3,6 +3,7 @@ members = ["weverse", "weverse/downloader", "sns-archive"]
 
 [workspace.dependencies]
 anyhow = "1.0"
+async-once-cell = "0.4"
 base64 = "0.13"
 chrono = "0.4"
 clap = "4.0"

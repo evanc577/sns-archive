@@ -22,3 +22,4 @@ uuid = { workspace = true, features = ["v4"] }
 
 [dev-dependencies]
 dotenv = { workspace = true }
+async-once-cell = { workspace = true }

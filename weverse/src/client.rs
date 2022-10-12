@@ -1,7 +1,9 @@
 use anyhow::Result;
 use reqwest::Client;
 
-use crate::endpoint::{vod::{vod_info, VodInfo}, community_id::CommunityId};
+use crate::auth::{login, LoginInfo};
+use crate::endpoint::community_id::CommunityId;
+use crate::endpoint::vod::{vod_info, VodInfo};
 
 #[derive(Clone, Debug)]
 pub struct WeverseClient<'a> {
@@ -28,8 +30,15 @@ pub struct AuthenticatedWeverseClient<'a> {
 
 impl<'a> AuthenticatedWeverseClient<'a> {
     /// Create a new WeverseClient
-    pub fn login(reqwest_client: &'a Client, password: &str) -> Self {
-        todo!()
+    pub async fn login(
+        reqwest_client: &'a Client,
+        login_info: &LoginInfo,
+    ) -> Result<AuthenticatedWeverseClient<'a>> {
+        let auth = login(reqwest_client, login_info).await?;
+        Ok(Self {
+            reqwest_client,
+            auth: format!("Bearer {}", auth),
+        })
     }
 
     /// Fetch information about a Weverse VOD, including metadata and videos
