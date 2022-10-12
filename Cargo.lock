@@ -367,6 +367,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "dotenv"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77c90badedccf4105eca100756a0b1289e191f6fcbdadd3cee1d2f614f97da8f"
+
+[[package]]
 name = "dtoa"
 version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2204,6 +2210,9 @@ name = "uuid"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "feb41e78f93363bb2df8b0e86a2ca30eed7806ea16ea0c790d757cf93f79be83"
+dependencies = [
+ "getrandom 0.2.7",
+]
 
 [[package]]
 name = "vcpkg"
@@ -2365,6 +2374,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "base64",
+ "dotenv",
  "hmac",
  "lazy_static",
  "regex",
@@ -2373,6 +2383,7 @@ dependencies = [
  "sha1",
  "time 0.3.15",
  "tokio",
+ "uuid",
 ]
 
 [[package]]

@@ -6,6 +6,8 @@ use time::OffsetDateTime;
 use crate::auth::{compute_url, get_secret};
 use crate::endpoint::APP_ID;
 
+use super::REFERER;
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct InKeyResponse {
@@ -84,9 +86,10 @@ async fn vod_videos(
     .await?;
     let in_key = client
         .post(inkey_url.as_str())
-        .header(header::REFERER, "https://weverse.io/")
+        .header(header::REFERER, REFERER)
         .send()
         .await?
+        .error_for_status()?
         .json::<InKeyResponse>()
         .await?
         .in_key;
@@ -102,6 +105,7 @@ async fn vod_videos(
         .query(&[("key", in_key.as_str())])
         .send()
         .await?
+        .error_for_status()?
         .json::<VodResponse>()
         .await?
         .videos
@@ -177,9 +181,10 @@ pub(crate) async fn vod_info(client: &Client, vod_id: &str) -> Result<VodInfo> {
     .await?;
     let resp = client
         .get(url.as_str())
-        .header(header::REFERER, "https://weverse.io/")
+        .header(header::REFERER, REFERER)
         .send()
         .await?
+        .error_for_status()?
         .json::<VodInfoResponse>()
         .await?;
 
