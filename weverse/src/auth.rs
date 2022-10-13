@@ -8,7 +8,7 @@ use sha1::Sha1;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::error::WeverseError;
+use crate::{error::WeverseError, endpoint::me::me};
 
 lazy_static! {
     static ref JS_RE: Regex = Regex::new(r#"src="(?P<url>.+/main.*\.js)""#).unwrap();
@@ -142,6 +142,10 @@ pub(crate) async fn login(client: &Client, login_info: &LoginInfo) -> Result<Str
         .json::<LoginResponse>()
         .await?
         .access_token;
+    let access_token = format!("Bearer {}", access_token);
+
+    // Check login status
+    me(client, &access_token).await?;
 
     Ok(access_token)
 }
