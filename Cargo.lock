@@ -2391,6 +2391,7 @@ dependencies = [
  "sha1",
  "time 0.3.15",
  "tokio",
+ "toml",
  "uuid",
 ]
 

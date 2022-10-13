@@ -1,3 +1,5 @@
+use std::{collections::HashMap, path::PathBuf};
+
 use anyhow::Result;
 use hmac::{Hmac, Mac};
 use lazy_static::lazy_static;
@@ -6,9 +8,11 @@ use reqwest::{header, Client, Url};
 use serde::{Deserialize, Serialize};
 use sha1::Sha1;
 use time::OffsetDateTime;
+use tokio::{fs, sync::Mutex};
+use tokio::io::AsyncWriteExt;
 use uuid::Uuid;
 
-use crate::{error::WeverseError, endpoint::me::me};
+use crate::{endpoint::me::me, error::WeverseError};
 
 lazy_static! {
     static ref JS_RE: Regex = Regex::new(r#"src="(?P<url>.+/main.*\.js)""#).unwrap();
@@ -85,6 +89,14 @@ pub(crate) struct LoginResponse {
 }
 
 pub(crate) async fn login(client: &Client, login_info: &LoginInfo) -> Result<String> {
+    // Check saved authorization
+    if let Ok(Some(auth)) = load_saved_authorization(&login_info.email).await {
+        // Check login status
+        if me(client, &auth).await.is_ok() {
+            return Ok(auth);
+        }
+    }
+
     // Extract app secrets
     let login_page = client
         .get("https://account.weverse.io/en/signup")
@@ -147,7 +159,61 @@ pub(crate) async fn login(client: &Client, login_info: &LoginInfo) -> Result<Str
     // Check login status
     me(client, &access_token).await?;
 
+    // Save authorization
+    store_authorization(&login_info.email, &access_token).await?;
+
     Ok(access_token)
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+struct SavedAuthorization {
+    authorization: String,
+}
+
+static SAVED_AUTH_FILE_NAME: &str = "sns-archive/weverse_logins";
+
+fn saved_authorization_file() -> Result<PathBuf> {
+    directories::BaseDirs::new()
+        .map(|d| d.data_dir().join(SAVED_AUTH_FILE_NAME))
+        .ok_or_else(|| WeverseError::SavedAuthFile.into())
+}
+
+async fn load_saved_authorization(username: &str) -> Result<Option<String>> {
+    let filename = saved_authorization_file()?;
+    let contents = fs::read_to_string(filename).await?;
+    let authorizations: HashMap<String, SavedAuthorization> = toml::from_str(&contents)?;
+    Ok(authorizations
+        .get(username)
+        .map(|a| a.authorization.clone()))
+}
+
+lazy_static! {
+    static ref AUTH_FILE_MTX: Mutex<()> = Mutex::new(());
+}
+
+async fn store_authorization(username: &str, authoriazation: &str) -> Result<()> {
+    let _guard = AUTH_FILE_MTX.lock().await;
+
+    let filename = saved_authorization_file()?;
+    fs::create_dir_all(&filename.parent().unwrap()).await?;
+    let contents = if let Ok(c) = fs::read_to_string(&filename).await {
+        c
+    } else {
+        Default::default()
+    };
+    let mut authorizations: HashMap<String, SavedAuthorization> = toml::from_str(&contents)?;
+    authorizations.insert(
+        username.to_string(),
+        SavedAuthorization {
+            authorization: authoriazation.to_string(),
+        },
+    );
+
+    let mut file = fs::File::create(filename).await?;
+    file.write_all(toml::to_vec(&authorizations)?.as_slice())
+        .await?;
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -171,6 +237,6 @@ mod test {
         let login_info = LoginInfo { email, password };
 
         let client = Client::new();
-        assert!(login(&client, &login_info).await.is_ok());
+        login(&client, &login_info).await.unwrap();
     }
 }
