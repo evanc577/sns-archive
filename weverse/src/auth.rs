@@ -1,4 +1,5 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::collections::HashMap;
+use std::path::PathBuf;
 
 use anyhow::Result;
 use hmac::{Hmac, Mac};
@@ -8,11 +9,13 @@ use reqwest::{header, Client, Url};
 use serde::{Deserialize, Serialize};
 use sha1::Sha1;
 use time::OffsetDateTime;
-use tokio::{fs, sync::Mutex};
+use tokio::fs;
 use tokio::io::AsyncWriteExt;
+use tokio::sync::Mutex;
 use uuid::Uuid;
 
-use crate::{endpoint::me::me, error::WeverseError};
+use crate::endpoint::me::me;
+use crate::error::WeverseError;
 
 lazy_static! {
     static ref JS_RE: Regex = Regex::new(r#"src="(?P<url>.+/main.*\.js)""#).unwrap();

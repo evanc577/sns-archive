@@ -2,12 +2,9 @@ use anyhow::Result;
 use reqwest::{header, Client};
 use serde::Deserialize;
 
-use crate::{
-    auth::{compute_url, get_secret},
-    client,
-};
-
 use super::{APP_ID, REFERER};
+use crate::auth::{compute_url, get_secret};
+use crate::client;
 
 #[allow(dead_code)]
 #[derive(Deserialize, Clone, Debug)]

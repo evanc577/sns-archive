@@ -8,6 +8,12 @@ use crate::auth::{compute_url, get_secret};
 #[derive(Eq, PartialEq, Hash, Clone, Copy, Debug)]
 pub struct CommunityId(u64);
 
+impl CommunityId {
+    pub fn new(id: u64) -> Self {
+        Self(id)
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct CommunityIdResponse {
@@ -40,24 +46,8 @@ pub(crate) async fn community_id(client: &Client, artist: &str, auth: &str) -> R
 
 #[cfg(test)]
 mod test {
-    use async_once_cell::OnceCell;
-    use dotenv::dotenv;
-
     use super::*;
-    use crate::auth::{login, LoginInfo};
-
-    static LOGIN_INFO: OnceCell<String> = OnceCell::new();
-
-    async fn setup() -> String {
-        let _ = dotenv();
-        let email = std::env::var("WEVERSE_EMAIL").unwrap();
-        let password = std::env::var("WEVERSE_PASSWORD").unwrap();
-        let login_info = LoginInfo { email, password };
-
-        let client = Client::new();
-        let auth = login(&client, &login_info).await.unwrap();
-        format!("Bearer {}", auth)
-    }
+    use crate::utils::{setup, LOGIN_INFO};
 
     #[tokio::test]
     async fn valid() {

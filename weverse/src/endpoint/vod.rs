@@ -6,6 +6,7 @@ use time::OffsetDateTime;
 use super::REFERER;
 use crate::auth::{compute_url, get_secret};
 use crate::endpoint::APP_ID;
+use crate::utils::deserialize_timestamp;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -137,14 +138,6 @@ struct VodInfoResponse {
     time: OffsetDateTime,
     author: Author,
     extension: Extension,
-}
-
-fn deserialize_timestamp<'de, D>(deserializer: D) -> Result<OffsetDateTime, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let ts = i128::deserialize(deserializer)? * 1_000_000;
-    OffsetDateTime::from_unix_timestamp_nanos(ts).map_err(serde::de::Error::custom)
 }
 
 #[derive(Deserialize, Debug)]
