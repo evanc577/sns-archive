@@ -1,5 +1,3 @@
-cargo-features = ["workspace-inheritance"]
-
 [package]
 name = "weverse"
 version = "0.1.0"
@@ -21,7 +19,7 @@ serde = { workspace = true, features = ["derive"] }
 sha1 = { workspace = true }
 sns_archive_common = { path = "../common" }
 time = { workspace = true, features = ["formatting", "serde"]}
-tokio = { workspapce = true, features = ["macros"] }
+tokio = { workspace = true, features = ["macros"] }
 toml = { workspace = true }
 unicode-segmentation = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }

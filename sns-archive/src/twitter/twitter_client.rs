@@ -86,6 +86,7 @@ impl<'a> TwitterClient<'a> {
 
         println!("Querying tweets...");
         for chunk in chunks.into_iter() {
+            #[allow(unstable_name_collisions)]
             let id: String = chunk.intersperse(",").collect();
             let params = [
                 ("id", id.as_str()),

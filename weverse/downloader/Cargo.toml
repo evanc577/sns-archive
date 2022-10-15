@@ -1,5 +1,3 @@
-cargo-features = ["workspace-inheritance"]
-
 [package]
 name = "weverse_vod_downloader"
 version = "0.1.0"
@@ -17,5 +15,5 @@ lazy_static = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 unicode-segmentation = { workspace = true }
 regex = { workspace = true }
-time = { workspace = true, features = ["formatting"]}
-weverse = { path = "../"}
+time = { workspace = true, features = ["formatting"] }
+weverse = { path = "../" }

@@ -69,6 +69,7 @@ pub async fn download_members(members: Vec<NPMember>) -> Result<()> {
     Ok(())
 }
 
+#[allow(dead_code)]
 async fn process_one(url: &str, path: &Path) -> Result<()> {
     let id = ID_RE
         .captures_iter(url)

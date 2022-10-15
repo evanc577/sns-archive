@@ -267,6 +267,7 @@ impl<'a> DownloadClient<'a> {
         }
 
         if !error_urls.is_empty() {
+            #[allow(unstable_name_collisions)]
             let err: String = error_urls
                 .into_iter()
                 .intersperse("\n".to_string())
