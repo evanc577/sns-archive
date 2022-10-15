@@ -4,7 +4,6 @@ use serde::Deserialize;
 
 use super::{APP_ID, REFERER};
 use crate::auth::{compute_url, get_secret};
-use crate::client;
 
 #[allow(dead_code)]
 #[derive(Deserialize, Clone, Debug)]

@@ -1,6 +1,6 @@
 use anyhow::Result;
 use reqwest::{header, Client, Url};
-use serde::{Deserialize, Deserializer};
+use serde::Deserialize;
 use time::OffsetDateTime;
 
 use super::REFERER;

@@ -24,8 +24,6 @@ use crate::utils::deserialize_timestamp;
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ArtistPost {
-    #[serde(skip)]
-    auth: String,
     pub attachment: PostAttachment,
     #[serde(rename = "publishedAt")]
     #[serde(deserialize_with = "deserialize_timestamp")]
@@ -104,7 +102,7 @@ pub(crate) async fn post(client: &Client, auth: &str, post_id: &str) -> Result<A
     )
     .await?;
 
-    let mut post = client
+    let post = client
         .get(url.as_str())
         .header(header::REFERER, REFERER)
         .header(header::AUTHORIZATION, auth)
@@ -113,7 +111,6 @@ pub(crate) async fn post(client: &Client, auth: &str, post_id: &str) -> Result<A
         .error_for_status()?
         .json::<ArtistPost>()
         .await?;
-    post.auth = auth.to_string();
 
     Ok(post)
 }
