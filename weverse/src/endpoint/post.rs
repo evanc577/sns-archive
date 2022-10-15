@@ -1,18 +1,31 @@
 use std::collections::HashMap;
+use std::path::Path;
 
 use anyhow::Result;
+use async_trait::async_trait;
+use futures::StreamExt;
+use lazy_static::lazy_static;
+use regex::Regex;
 use reqwest::{header, Client};
-use serde::Deserialize;
-use time::OffsetDateTime;
+use serde::{Deserialize, Serialize};
+use sns_archive_common::{streamed_download, SavablePost};
+use time::{format_description, OffsetDateTime};
+use tokio::fs;
+use tokio::io::AsyncWriteExt;
+use unicode_segmentation::UnicodeSegmentation;
 
 use super::community_id::CommunityId;
+use super::vod::vod_info;
 use super::{APP_ID, REFERER};
 use crate::auth::{compute_url, get_secret};
-use crate::utils::{deserialize_community_id, deserialize_timestamp};
+use crate::error::WeverseError;
+use crate::utils::deserialize_timestamp;
 
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ArtistPost {
+    #[serde(skip)]
+    auth: String,
     pub attachment: PostAttachment,
     #[serde(rename = "publishedAt")]
     #[serde(deserialize_with = "deserialize_timestamp")]
@@ -26,26 +39,26 @@ pub struct ArtistPost {
     pub community: Community,
 }
 
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct PostAttachment {
     pub photo: Option<HashMap<String, Photo>>,
     pub video: Option<HashMap<String, Video>>,
 }
 
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct Photo {
     pub url: String,
     pub width: u64,
     pub height: u64,
 }
 
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Video {
     pub upload_info: VideoUploadInfo,
 }
 
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct VideoUploadInfo {
     pub width: u64,
@@ -54,28 +67,26 @@ pub struct VideoUploadInfo {
     pub id: String,
 }
 
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Member {
     #[serde(rename = "memberId")]
     pub id: String,
-    #[serde(deserialize_with = "deserialize_community_id")]
     pub community_id: CommunityId,
     pub profile_name: String,
     #[serde(rename = "artistOfficialProfile")]
     pub official_profile: OfficialProfile,
 }
 
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct OfficialProfile {
     pub official_name: String,
 }
 
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct Community {
     #[serde(rename = "communityId")]
-    #[serde(deserialize_with = "deserialize_community_id")]
     pub id: CommunityId,
     #[serde(rename = "communityName")]
     pub name: String,
@@ -93,7 +104,7 @@ pub(crate) async fn post(client: &Client, auth: &str, post_id: &str) -> Result<A
     )
     .await?;
 
-    let post = client
+    let mut post = client
         .get(url.as_str())
         .header(header::REFERER, REFERER)
         .header(header::AUTHORIZATION, auth)
@@ -102,8 +113,143 @@ pub(crate) async fn post(client: &Client, auth: &str, post_id: &str) -> Result<A
         .error_for_status()?
         .json::<ArtistPost>()
         .await?;
+    post.auth = auth.to_string();
 
     Ok(post)
+}
+
+lazy_static! {
+    static ref ATTACHMENT_PHOTO_RE: Regex =
+        Regex::new(r#"<w:attachment.*?type="photo".*?>"#).unwrap();
+    static ref ATTACHMENT_VIDEO_RE: Regex =
+        Regex::new(r#"<w:attachment.*?type="video".*?>"#).unwrap();
+    static ref ATTACHMENT_ID_RE: Regex = Regex::new(r#"\bid="(?P<id>[0-9\-]+)""#).unwrap();
+}
+
+#[async_trait]
+impl SavablePost for ArtistPost {
+    async fn download(&self, client: &Client, directory: impl AsRef<Path> + Send) -> Result<()> {
+        let (info_res, photos_res, videos_res) = futures::join!(
+            self.write_info(directory.as_ref()),
+            self.download_all_photos(client, directory.as_ref()),
+            self.download_all_videos(client, directory.as_ref()),
+        );
+
+        if info_res.is_err()
+            || photos_res.iter().any(|r| r.is_err())
+            || videos_res.iter().any(|r| r.is_err())
+        {
+            Err(WeverseError::Download(self.id.clone()).into())
+        } else {
+            Ok(())
+        }
+    }
+
+    fn slug(&self) -> Result<String> {
+        let time_str = {
+            let format = format_description::parse("[year][month][day]")?;
+            self.time.format(&format)?
+        };
+        let id = &self.id;
+        let username = &self.author.official_profile.official_name;
+        let body: String = UnicodeSegmentation::graphemes(self.plain_body.as_str(), true)
+            .take(50)
+            .collect();
+        Ok(format!("{}-{}-{}-{}", time_str, id, username, body))
+    }
+}
+
+impl ArtistPost {
+    async fn write_info(&self, directory: impl AsRef<Path>) -> Result<()> {
+        let info = toml::to_vec(self)?;
+        let filename = directory.as_ref().join(format!("{}.toml", self.slug()?));
+        let mut file = fs::File::create(filename).await?;
+        file.write_all(info.as_slice()).await?;
+        Ok(())
+    }
+
+    async fn download_all_photos(
+        &self,
+        client: &Client,
+        directory: impl AsRef<Path>,
+    ) -> Vec<Result<()>> {
+        futures::stream::iter(self.photos())
+            .enumerate()
+            .map(|(i, p)| self.download_photo(client, p, i, directory.as_ref()))
+            .buffered(usize::MAX)
+            .collect()
+            .await
+    }
+
+    async fn download_all_videos(
+        &self,
+        client: &Client,
+        directory: impl AsRef<Path>,
+    ) -> Vec<Result<()>> {
+        futures::stream::iter(self.videos())
+            .enumerate()
+            .map(|(i, v)| self.download_video(client, v, i, directory.as_ref()))
+            .buffered(usize::MAX)
+            .collect()
+            .await
+    }
+
+    async fn download_photo(
+        &self,
+        client: &Client,
+        photo: Photo,
+        idx: usize,
+        directory: impl AsRef<Path>,
+    ) -> Result<()> {
+        let ext = photo
+            .url
+            .rsplit_once('.')
+            .map(|(_, ext)| ext)
+            .unwrap_or("jpg");
+        let filename = format!("{}_img{:02}.{}", self.slug()?, idx + 1, ext);
+        let path = directory.as_ref().join(filename);
+        streamed_download(client, photo.url, path).await
+    }
+
+    async fn download_video(
+        &self,
+        client: &Client,
+        video: Video,
+        idx: usize,
+        directory: impl AsRef<Path>,
+    ) -> Result<()> {
+        let vod_info = vod_info(client, &video.upload_info.id).await?;
+        let video_url = &vod_info.videos.iter().max().unwrap().source;
+        let ext = vod_info
+            .url
+            .path()
+            .rsplit_once('.')
+            .map(|(_, ext)| ext)
+            .unwrap_or("mp4");
+        let filename = format!("{}_vid{:02}.{}", self.slug()?, idx, ext);
+        let path = directory.as_ref().join(filename);
+        streamed_download(client, video_url, path).await
+    }
+
+    fn photos(&self) -> impl Iterator<Item = Photo> + '_ {
+        self.attachments(&ATTACHMENT_PHOTO_RE)
+            .filter_map(|a| Some(ATTACHMENT_ID_RE.captures(a)?.name("id")?.as_str()))
+            .filter_map(|id| self.attachment.photo.as_ref()?.get(id))
+            .cloned()
+    }
+
+    fn videos(&self) -> impl Iterator<Item = Video> + '_ {
+        self.attachments(&ATTACHMENT_VIDEO_RE)
+            .filter_map(|a| Some(ATTACHMENT_ID_RE.captures(a)?.name("id")?.as_str()))
+            .filter_map(|id| self.attachment.video.as_ref()?.get(id))
+            .cloned()
+    }
+
+    fn attachments<'a>(&'a self, attachment_re: &'a Regex) -> impl Iterator<Item = &'a str> {
+        attachment_re
+            .captures_iter(&self.body)
+            .map(|c| c.get(0).unwrap().as_str())
+    }
 }
 
 #[cfg(test)]

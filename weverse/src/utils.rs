@@ -1,22 +1,16 @@
 use serde::{Deserialize, Deserializer};
-use time::OffsetDateTime;
-
-use crate::endpoint::community_id::CommunityId;
+use time::{OffsetDateTime, UtcOffset};
 
 pub(crate) fn deserialize_timestamp<'de, D>(deserializer: D) -> Result<OffsetDateTime, D::Error>
 where
     D: Deserializer<'de>,
 {
     let ts = i128::deserialize(deserializer)? * 1_000_000;
-    OffsetDateTime::from_unix_timestamp_nanos(ts).map_err(serde::de::Error::custom)
-}
-
-pub(crate) fn deserialize_community_id<'de, D>(deserializer: D) -> Result<CommunityId, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let id = u64::deserialize(deserializer)?;
-    Ok(CommunityId::new(id))
+    let dt = OffsetDateTime::from_unix_timestamp_nanos(ts)
+        .map_err(serde::de::Error::custom)?
+        // KST
+        .to_offset(UtcOffset::from_hms(9, 0, 0).map_err(serde::de::Error::custom)?);
+    Ok(dt)
 }
 
 #[cfg(test)]

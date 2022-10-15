@@ -1,6 +1,7 @@
 use anyhow::Result;
 use reqwest::{header, Client};
-use serde::Deserialize;
+use serde::ser::SerializeStruct;
+use serde::{Deserialize, Deserializer, Serialize};
 
 use super::{APP_ID, REFERER};
 use crate::auth::{compute_url, get_secret};
@@ -11,6 +12,31 @@ pub struct CommunityId(u64);
 impl CommunityId {
     pub fn new(id: u64) -> Self {
         Self(id)
+    }
+
+    pub fn id(&self) -> u64 {
+        self.0
+    }
+}
+
+impl Serialize for CommunityId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut state = serializer.serialize_struct("CommunityId", 1)?;
+        state.serialize_field("id", &self.0)?;
+        state.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for CommunityId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let id = u64::deserialize(deserializer)?;
+        Ok(CommunityId::new(id))
     }
 }
 

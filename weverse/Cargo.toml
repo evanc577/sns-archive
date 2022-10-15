@@ -9,6 +9,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = { workspace = true }
+async-trait = { workspace = true }
 base64 = { workspace = true }
 directories = { workspace = true }
 futures = { workspace = true }
@@ -18,9 +19,11 @@ regex = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 serde = { workspace = true, features = ["derive"] }
 sha1 = { workspace = true }
-time = { workspace = true, features = ["formatting"]}
+sns_archive_common = { path = "../common" }
+time = { workspace = true, features = ["formatting", "serde"]}
 tokio = { workspapce = true, features = ["macros"] }
 toml = { workspace = true }
+unicode-segmentation = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }
 
 [dev-dependencies]
