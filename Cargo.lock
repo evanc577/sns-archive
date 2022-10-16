@@ -2430,7 +2430,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "weverse_vod_downloader"
+name = "weverse-vod-downloader"
 version = "0.1.0"
 dependencies = [
  "anyhow",
