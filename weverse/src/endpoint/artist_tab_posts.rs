@@ -7,7 +7,7 @@ use serde::Deserialize;
 use time::OffsetDateTime;
 
 use super::community_id::CommunityId;
-use super::post::Member;
+use super::member::Member;
 use super::{APP_ID, REFERER};
 use crate::auth::{compute_url, get_secret};
 use crate::utils::{deserialize_timestamp, slug};

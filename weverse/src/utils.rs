@@ -3,7 +3,7 @@ use serde::{Deserialize, Deserializer};
 use time::{format_description, OffsetDateTime, UtcOffset};
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::endpoint::post::Member;
+use crate::endpoint::member::Member;
 
 pub(crate) fn deserialize_timestamp<'de, D>(deserializer: D) -> Result<OffsetDateTime, D::Error>
 where

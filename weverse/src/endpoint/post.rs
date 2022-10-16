@@ -15,6 +15,7 @@ use tokio::fs;
 use tokio::io::AsyncWriteExt;
 
 use super::community_id::CommunityId;
+use super::member::Member;
 use super::vod::{vod_videos, CVideo, VideoIds};
 use super::{APP_ID, REFERER};
 use crate::auth::{compute_url, get_secret};
@@ -30,6 +31,7 @@ pub struct ArtistPost {
     #[serde(serialize_with = "rfc3339::serialize")]
     pub time: OffsetDateTime,
     pub post_type: String,
+    pub section_type: String,
     #[serde(rename = "postId")]
     pub id: String,
     pub body: String,
@@ -66,23 +68,6 @@ pub struct VideoUploadInfo {
     pub height: u64,
     #[serde(rename = "videoId")]
     pub id: String,
-}
-
-#[derive(Deserialize, Serialize, Clone, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct Member {
-    #[serde(rename = "memberId")]
-    pub id: String,
-    pub community_id: CommunityId,
-    pub profile_name: String,
-    #[serde(rename = "artistOfficialProfile")]
-    pub official_profile: OfficialProfile,
-}
-
-#[derive(Deserialize, Serialize, Clone, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct OfficialProfile {
-    pub official_name: String,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -158,7 +143,7 @@ impl SavablePost for ArtistPost {
 
 impl ArtistPost {
     async fn write_info(&self, directory: impl AsRef<Path>) -> Result<()> {
-        let info = serde_json::to_vec(self)?;
+        let info = serde_json::to_vec_pretty(self)?;
         let filename = directory.as_ref().join(format!("{}.json", self.slug()?));
         let mut file = fs::File::create(filename).await?;
         file.write_all(info.as_slice()).await?;

@@ -1,6 +1,7 @@
 pub mod artist_tab_posts;
 pub mod community_id;
 pub mod me;
+pub mod member;
 pub mod post;
 pub mod vod;
 
