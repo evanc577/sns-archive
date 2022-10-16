@@ -204,7 +204,7 @@ impl ArtistPost {
             .rsplit_once('.')
             .map(|(_, ext)| ext)
             .unwrap_or("jpg");
-        let filename = format!("{}_img{:02}.{}", self.slug()?, idx + 1, ext);
+        let filename = format!("{}-img{:02}.{}", self.slug()?, idx + 1, ext);
         let path = directory.as_ref().join(filename);
         streamed_download(client, photo.url, path).await
     }
@@ -229,7 +229,7 @@ impl ArtistPost {
             .rsplit_once('.')
             .map(|(_, ext)| ext)
             .unwrap_or("mp4");
-        let filename = format!("{}_vid{:02}.{}", self.slug()?, idx + 1, ext);
+        let filename = format!("{}-vid{:02}.{}", self.slug()?, idx + 1, ext);
         let path = directory.as_ref().join(filename);
         streamed_download(client, video_url, path).await
     }
