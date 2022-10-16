@@ -10,17 +10,16 @@ use reqwest::{header, Client, Url};
 use serde::{Deserialize, Serialize};
 use sns_archive_common::{set_mtime, streamed_download, SavablePost};
 use time::serde::rfc3339;
-use time::{format_description, OffsetDateTime};
+use time::OffsetDateTime;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
-use unicode_segmentation::UnicodeSegmentation;
 
 use super::community_id::CommunityId;
 use super::vod::{vod_videos, CVideo, VideoIds};
 use super::{APP_ID, REFERER};
 use crate::auth::{compute_url, get_secret};
 use crate::error::WeverseError;
-use crate::utils::deserialize_timestamp;
+use crate::utils::{deserialize_timestamp, slug};
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -153,22 +152,7 @@ impl SavablePost for ArtistPost {
     }
 
     fn slug(&self) -> Result<String> {
-        let time_str = {
-            let format = format_description::parse("[year][month][day]")?;
-            self.time.format(&format)?
-        };
-        let id = &self.id;
-        let username = &self.author.official_profile.official_name;
-        let body: String = UnicodeSegmentation::graphemes(self.plain_body.as_str(), true)
-            .take(50)
-            .collect();
-        let slug = format!("{}-{}-{}-{}", time_str, id, username, body);
-        let sanitize_options = sanitize_filename::Options {
-            windows: true,
-            ..Default::default()
-        };
-        let sanitized_slug = sanitize_filename::sanitize_with_options(slug, sanitize_options);
-        Ok(sanitized_slug)
+        slug(&self.time, &self.id, &self.author, &self.plain_body)
     }
 }
 

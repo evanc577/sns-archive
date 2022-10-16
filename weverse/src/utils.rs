@@ -1,5 +1,9 @@
+use anyhow::Result;
 use serde::{Deserialize, Deserializer};
-use time::{OffsetDateTime, UtcOffset};
+use time::{format_description, OffsetDateTime, UtcOffset};
+use unicode_segmentation::UnicodeSegmentation;
+
+use crate::endpoint::post::Member;
 
 pub(crate) fn deserialize_timestamp<'de, D>(deserializer: D) -> Result<OffsetDateTime, D::Error>
 where
@@ -13,8 +17,32 @@ where
     Ok(dt)
 }
 
+pub(crate) fn slug(
+    time: &OffsetDateTime,
+    post_id: &str,
+    author: &Member,
+    body: &str,
+) -> Result<String> {
+    let time_str = {
+        let format = format_description::parse("[year][month][day]")?;
+        time.format(&format)?
+    };
+    let username = &author.official_profile.official_name;
+    let body: String = UnicodeSegmentation::graphemes(body, true)
+        .take(50)
+        .collect();
+    let slug = format!("{}-{}-{}-{}", time_str, post_id, username, body);
+    let sanitize_options = sanitize_filename::Options {
+        windows: true,
+        ..Default::default()
+    };
+    let sanitized_slug = sanitize_filename::sanitize_with_options(slug, sanitize_options);
+    Ok(sanitized_slug)
+}
+
 #[cfg(test)]
 use async_once_cell::OnceCell;
+
 #[cfg(test)]
 pub static LOGIN_INFO: OnceCell<String> = OnceCell::new();
 

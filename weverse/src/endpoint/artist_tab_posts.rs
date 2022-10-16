@@ -4,14 +4,13 @@ use anyhow::Result;
 use futures::Stream;
 use reqwest::{header, Client};
 use serde::Deserialize;
-use time::{format_description, OffsetDateTime};
-use unicode_segmentation::UnicodeSegmentation;
+use time::OffsetDateTime;
 
 use super::community_id::CommunityId;
 use super::post::Member;
 use super::{APP_ID, REFERER};
 use crate::auth::{compute_url, get_secret};
-use crate::utils::deserialize_timestamp;
+use crate::utils::{deserialize_timestamp, slug};
 
 #[derive(Debug)]
 enum PageState {
@@ -138,22 +137,7 @@ pub struct ArtistPostShort {
 
 impl ArtistPostShort {
     pub fn slug(&self) -> Result<String> {
-        let time_str = {
-            let format = format_description::parse("[year][month][day]")?;
-            self.time.format(&format)?
-        };
-        let id = &self.post_id;
-        let username = &self.author.official_profile.official_name;
-        let body: String = UnicodeSegmentation::graphemes(self.plain_body.as_str(), true)
-            .take(50)
-            .collect();
-        let slug = format!("{}-{}-{}-{}", time_str, id, username, body);
-        let sanitize_options = sanitize_filename::Options {
-            windows: true,
-            ..Default::default()
-        };
-        let sanitized_slug = sanitize_filename::sanitize_with_options(slug, sanitize_options);
-        Ok(sanitized_slug)
+        slug(&self.time, &self.post_id, &self.author, &self.plain_body)
     }
 }
 
