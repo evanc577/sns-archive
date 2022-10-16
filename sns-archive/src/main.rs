@@ -65,7 +65,11 @@ async fn run() -> Result<()> {
 
     match args.sns {
         Sns::Weverse => {
-            todo!()
+            if let Some(conf) = conf.weverse {
+                sns_archive::weverse::download(conf).await?;
+            } else {
+                return Err(anyhow!("Missing weverse section in config file"));
+            }
         }
         Sns::Twitter {
             input: i,

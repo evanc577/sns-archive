@@ -7,7 +7,7 @@ use reqwest::Client;
 use crate::auth::{login, LoginInfo};
 use crate::endpoint::artist_tab_posts::ArtistPosts;
 use crate::endpoint::community_id::{community_id, CommunityId};
-use crate::endpoint::post::{ArtistPost, post};
+use crate::endpoint::post::{post, ArtistPost};
 use crate::endpoint::vod::{vod_info, VodInfo};
 
 #[derive(Clone, Debug)]

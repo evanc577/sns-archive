@@ -70,22 +70,49 @@ impl Ord for Encoding {
     }
 }
 
-async fn vod_videos(
+pub enum VideoIds {
+    Extension(ExtensionVideo),
+    NoExtension(CVideo),
+}
+
+impl VideoIds {
+    fn infra_id(&self) -> &str {
+        match self {
+            Self::Extension(e) => e.infra_id.as_str(),
+            Self::NoExtension(c) => c.infra_id.as_str(),
+        }
+    }
+}
+
+pub struct CVideo {
+    pub post_id: String,
+    pub infra_id: String,
+}
+
+pub(crate) async fn vod_videos(
     client: &Client,
-    extension: &ExtensionVideo,
+    video_ids: &VideoIds,
     secret: &[u8],
 ) -> Result<Vec<Video>> {
     // Acquire inKey
-    let inkey_url = compute_url(
-        &format!(
+    let base_url = match video_ids {
+        VideoIds::Extension(e) => format!(
             "/video/v1.0/vod/{}/inKey?preview=false&appId={}&wpf=pc",
-            extension.video_id, APP_ID
+            e.video_id, APP_ID
         ),
-        secret,
-    )
-    .await?;
-    let in_key = client
-        .post(inkey_url.as_str())
+        VideoIds::NoExtension(id) => format!(
+            "/cvideo/v1.0/cvideo-{}/inKey/?videoId={}&appId={}&language=en&platform=WEB&wpf=pc",
+            id.post_id, id.post_id, APP_ID
+        ),
+    };
+    let inkey_url = compute_url(&base_url, secret).await?;
+
+    let req = match video_ids {
+        VideoIds::Extension(_) => client.post(inkey_url.as_str()),
+        VideoIds::NoExtension(_) => client.get(inkey_url.as_str()),
+    };
+
+    let in_key = req
         .header(header::REFERER, REFERER)
         .send()
         .await?
@@ -93,12 +120,11 @@ async fn vod_videos(
         .json::<InKeyResponse>()
         .await?
         .in_key;
-    dbg!(&in_key);
 
     // Get vod info
     let url = format!(
         "https://global.apis.naver.com/rmcnmv/rmcnmv/vod/play/v2.0/{}",
-        extension.infra_id
+        video_ids.infra_id()
     );
     let mut videos = client
         .get(&url)
@@ -152,7 +178,7 @@ struct Extension {
 }
 
 #[derive(Deserialize, Debug)]
-struct ExtensionVideo {
+pub struct ExtensionVideo {
     #[serde(rename = "infraVideoId")]
     infra_id: String,
     #[serde(rename = "videoId")]
@@ -181,7 +207,7 @@ pub(crate) async fn vod_info(client: &Client, vod_id: &str) -> Result<VodInfo> {
         .await?;
 
     // Get videos
-    let videos = vod_videos(client, &resp.extension.video, &secret).await?;
+    let videos = vod_videos(client, &VideoIds::Extension(resp.extension.video), &secret).await?;
 
     let info = VodInfo {
         title: resp.title,

@@ -14,11 +14,13 @@ indicatif = { workspace = true }
 itertools = { workspace = true }
 sanitize-filename = { workspace = true }
 scraper = { workspace = true }
+sns_archive_common = { path = "../common" }
 tempfile = { workspace = true }
 url = { workspace = true }
 unicode-segmentation = { workspace = true }
 infer = { workspace = true }
 thirtyfour = { workspace = true }
+weverse = { path = "../weverse" }
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

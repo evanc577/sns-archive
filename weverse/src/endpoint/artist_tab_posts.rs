@@ -4,12 +4,13 @@ use anyhow::Result;
 use futures::Stream;
 use reqwest::{header, Client};
 use serde::Deserialize;
-use time::OffsetDateTime;
-
-use crate::auth::{compute_url, get_secret};
+use time::{format_description, OffsetDateTime};
+use unicode_segmentation::UnicodeSegmentation;
 
 use super::community_id::CommunityId;
+use super::post::Member;
 use super::{APP_ID, REFERER};
+use crate::auth::{compute_url, get_secret};
 use crate::utils::deserialize_timestamp;
 
 #[derive(Debug)]
@@ -89,17 +90,14 @@ impl ArtistPosts {
             .header(header::REFERER, REFERER)
             .header(header::AUTHORIZATION, &self.auth)
             .send()
-            .await
-            .unwrap()
-            .error_for_status()
-            .unwrap()
+            .await?
+            .error_for_status()?
             .json::<ArtistPostsResponse>()
-            .await
-            .unwrap();
+            .await?;
 
         // Update page state
-        self.page_state = match post_page.paging {
-            Some(paging) => PageState::Next(paging.next_params.after),
+        self.page_state = match post_page.paging.next_params {
+            Some(next_params) => PageState::Next(next_params.after),
             None => PageState::Done,
         };
 
@@ -112,14 +110,14 @@ impl ArtistPosts {
 
 #[derive(Deserialize, Debug)]
 struct ArtistPostsResponse {
-    paging: Option<Paging>,
+    paging: Paging,
     data: Vec<ArtistPostShort>,
 }
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 struct Paging {
-    next_params: NextParams,
+    next_params: Option<NextParams>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -134,13 +132,37 @@ pub struct ArtistPostShort {
     #[serde(deserialize_with = "deserialize_timestamp")]
     pub time: OffsetDateTime,
     pub post_id: String,
+    pub plain_body: String,
+    pub author: Member,
+}
+
+impl ArtistPostShort {
+    pub fn slug(&self) -> Result<String> {
+        let time_str = {
+            let format = format_description::parse("[year][month][day]")?;
+            self.time.format(&format)?
+        };
+        let id = &self.post_id;
+        let username = &self.author.official_profile.official_name;
+        let body: String = UnicodeSegmentation::graphemes(self.plain_body.as_str(), true)
+            .take(50)
+            .collect();
+        let slug = format!("{}-{}-{}-{}", time_str, id, username, body);
+        let sanitize_options = sanitize_filename::Options {
+            windows: true,
+            ..Default::default()
+        };
+        let sanitized_slug = sanitize_filename::sanitize_with_options(slug, sanitize_options);
+        Ok(sanitized_slug)
+    }
 }
 
 #[cfg(test)]
 mod test {
+    use futures::stream::StreamExt;
+
     use super::*;
     use crate::utils::{setup, LOGIN_INFO};
-    use futures::stream::StreamExt;
 
     #[tokio::test]
     async fn paging() {

@@ -15,11 +15,13 @@ hmac = { workspace = true }
 lazy_static = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
+sanitize-filename = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
 sha1 = { workspace = true }
 sns_archive_common = { path = "../common" }
-time = { workspace = true, features = ["formatting", "serde"]}
-tokio = { workspace = true, features = ["macros"] }
+time = { workspace = true, features = ["formatting", "serde", "serde-well-known"] }
+tokio = { workspace = true, features = ["macros", "fs"] }
 toml = { workspace = true }
 unicode-segmentation = { workspace = true }
 uuid = { workspace = true, features = ["v4"] }

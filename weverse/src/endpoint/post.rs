@@ -6,16 +6,17 @@ use async_trait::async_trait;
 use futures::StreamExt;
 use lazy_static::lazy_static;
 use regex::Regex;
-use reqwest::{header, Client};
+use reqwest::{header, Client, Url};
 use serde::{Deserialize, Serialize};
-use sns_archive_common::{streamed_download, SavablePost};
+use sns_archive_common::{set_mtime, streamed_download, SavablePost};
+use time::serde::rfc3339;
 use time::{format_description, OffsetDateTime};
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 use unicode_segmentation::UnicodeSegmentation;
 
 use super::community_id::CommunityId;
-use super::vod::vod_info;
+use super::vod::{vod_videos, CVideo, VideoIds};
 use super::{APP_ID, REFERER};
 use crate::auth::{compute_url, get_secret};
 use crate::error::WeverseError;
@@ -27,6 +28,7 @@ pub struct ArtistPost {
     pub attachment: PostAttachment,
     #[serde(rename = "publishedAt")]
     #[serde(deserialize_with = "deserialize_timestamp")]
+    #[serde(serialize_with = "rfc3339::serialize")]
     pub time: OffsetDateTime,
     pub post_type: String,
     #[serde(rename = "postId")]
@@ -54,6 +56,8 @@ pub struct Photo {
 #[serde(rename_all = "camelCase")]
 pub struct Video {
     pub upload_info: VideoUploadInfo,
+    #[serde(rename = "videoId")]
+    pub id: String,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -136,10 +140,16 @@ impl SavablePost for ArtistPost {
             || photos_res.iter().any(|r| r.is_err())
             || videos_res.iter().any(|r| r.is_err())
         {
-            Err(WeverseError::Download(self.id.clone()).into())
-        } else {
-            Ok(())
+            return Err(WeverseError::Download(self.id.clone()).into());
         }
+
+        // Set mtime on directory and all files in it
+        set_mtime(&directory, &self.time)?;
+        let mut read_dir = fs::read_dir(directory).await?;
+        while let Some(entry) = read_dir.next_entry().await? {
+            set_mtime(entry.path(), &self.time)?;
+        }
+        Ok(())
     }
 
     fn slug(&self) -> Result<String> {
@@ -152,14 +162,20 @@ impl SavablePost for ArtistPost {
         let body: String = UnicodeSegmentation::graphemes(self.plain_body.as_str(), true)
             .take(50)
             .collect();
-        Ok(format!("{}-{}-{}-{}", time_str, id, username, body))
+        let slug = format!("{}-{}-{}-{}", time_str, id, username, body);
+        let sanitize_options = sanitize_filename::Options {
+            windows: true,
+            ..Default::default()
+        };
+        let sanitized_slug = sanitize_filename::sanitize_with_options(slug, sanitize_options);
+        Ok(sanitized_slug)
     }
 }
 
 impl ArtistPost {
     async fn write_info(&self, directory: impl AsRef<Path>) -> Result<()> {
-        let info = toml::to_vec(self)?;
-        let filename = directory.as_ref().join(format!("{}.toml", self.slug()?));
+        let info = serde_json::to_vec(self)?;
+        let filename = directory.as_ref().join(format!("{}.json", self.slug()?));
         let mut file = fs::File::create(filename).await?;
         file.write_all(info.as_slice()).await?;
         Ok(())
@@ -198,8 +214,9 @@ impl ArtistPost {
         idx: usize,
         directory: impl AsRef<Path>,
     ) -> Result<()> {
-        let ext = photo
-            .url
+        let url = Url::parse(&photo.url)?;
+        let ext = url
+            .path()
             .rsplit_once('.')
             .map(|(_, ext)| ext)
             .unwrap_or("jpg");
@@ -215,15 +232,20 @@ impl ArtistPost {
         idx: usize,
         directory: impl AsRef<Path>,
     ) -> Result<()> {
-        let vod_info = vod_info(client, &video.upload_info.id).await?;
-        let video_url = &vod_info.videos.iter().max().unwrap().source;
-        let ext = vod_info
-            .url
+        let video_ids = VideoIds::NoExtension(CVideo {
+            post_id: video.id,
+            infra_id: video.upload_info.id,
+        });
+        let secret = get_secret(client).await.unwrap();
+        let vod_info = vod_videos(client, &video_ids, &secret).await.unwrap();
+        let video_url = &vod_info.iter().max().unwrap().source;
+        let url = Url::parse(video_url)?;
+        let ext = url
             .path()
             .rsplit_once('.')
             .map(|(_, ext)| ext)
             .unwrap_or("mp4");
-        let filename = format!("{}_vid{:02}.{}", self.slug()?, idx, ext);
+        let filename = format!("{}_vid{:02}.{}", self.slug()?, idx + 1, ext);
         let path = directory.as_ref().join(filename);
         streamed_download(client, video_url, path).await
     }
