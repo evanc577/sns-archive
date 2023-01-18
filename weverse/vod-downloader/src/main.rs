@@ -12,11 +12,15 @@ use reqwest::Client;
 use time::format_description;
 use unicode_segmentation::UnicodeSegmentation;
 use weverse::endpoint::vod::VodInfo;
-use weverse::WeverseClient;
+use weverse::AuthenticatedWeverseClient;
+use weverse::LoginInfo;
 
 #[derive(Parser)]
 struct Args {
     url: String,
+
+    email: String,
+    password: String,
 
     #[arg(short, long, value_name = "FILE")]
     output: Option<PathBuf>,
@@ -60,7 +64,8 @@ async fn main() -> Result<()> {
 
     // Fetch VOD info
     let reqwest_client = Client::new();
-    let weverse_client = WeverseClient::new(&reqwest_client);
+    let login_info = LoginInfo { email: args.email, password: args.password };
+    let weverse_client = AuthenticatedWeverseClient::login(&reqwest_client, &login_info).await?;
     let info = weverse_client.vod_info(post_id).await?;
 
     // Create output file

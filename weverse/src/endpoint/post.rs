@@ -38,6 +38,8 @@ pub struct ArtistPost {
     pub plain_body: String,
     pub author: Member,
     pub community: Community,
+    #[serde(skip)]
+    auth: String,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -90,7 +92,7 @@ pub(crate) async fn post(client: &Client, auth: &str, post_id: &str) -> Result<A
     )
     .await?;
 
-    let post = client
+    let mut post = client
         .get(url.as_str())
         .header(header::REFERER, REFERER)
         .header(header::AUTHORIZATION, auth)
@@ -99,6 +101,7 @@ pub(crate) async fn post(client: &Client, auth: &str, post_id: &str) -> Result<A
         .error_for_status()?
         .json::<ArtistPost>()
         .await?;
+    post.auth = auth.to_owned();
 
     Ok(post)
 }
@@ -117,7 +120,7 @@ impl SavablePost for ArtistPost {
         let (info_res, photos_res, videos_res) = futures::join!(
             self.write_info(directory.as_ref()),
             self.download_all_photos(client, directory.as_ref()),
-            self.download_all_videos(client, directory.as_ref()),
+            self.download_all_videos(client, &self.auth, directory.as_ref()),
         );
 
         if info_res.is_err()
@@ -166,11 +169,12 @@ impl ArtistPost {
     async fn download_all_videos(
         &self,
         client: &Client,
+        auth: &str,
         directory: impl AsRef<Path>,
     ) -> Vec<Result<()>> {
         futures::stream::iter(self.videos())
             .enumerate()
-            .map(|(i, v)| self.download_video(client, v, i, directory.as_ref()))
+            .map(|(i, v)| self.download_video(client, auth, v, i, directory.as_ref()))
             .buffered(usize::MAX)
             .collect()
             .await
@@ -197,6 +201,7 @@ impl ArtistPost {
     async fn download_video(
         &self,
         client: &Client,
+        auth: &str,
         video: Video,
         idx: usize,
         directory: impl AsRef<Path>,
@@ -206,7 +211,7 @@ impl ArtistPost {
             infra_id: video.upload_info.id,
         });
         let secret = get_secret(client).await.unwrap();
-        let vod_info = vod_videos(client, &video_ids, &secret).await.unwrap();
+        let vod_info = vod_videos(client, auth, &video_ids, &secret).await.unwrap();
         let video_url = &vod_info.iter().max().unwrap().source;
         let url = Url::parse(video_url)?;
         let ext = url

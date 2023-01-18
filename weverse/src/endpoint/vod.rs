@@ -91,6 +91,7 @@ pub struct CVideo {
 
 pub(crate) async fn vod_videos(
     client: &Client,
+    auth: &str,
     video_ids: &VideoIds,
     secret: &[u8],
 ) -> Result<Vec<Video>> {
@@ -114,6 +115,7 @@ pub(crate) async fn vod_videos(
 
     let in_key = req
         .header(header::REFERER, REFERER)
+        .header(header::AUTHORIZATION, auth)
         .send()
         .await?
         .error_for_status()?
@@ -185,7 +187,7 @@ pub struct ExtensionVideo {
     video_id: u64,
 }
 
-pub(crate) async fn vod_info(client: &Client, vod_id: &str) -> Result<VodInfo> {
+pub(crate) async fn vod_info(client: &Client, auth: &str, vod_id: &str) -> Result<VodInfo> {
     let secret = get_secret(client).await?;
 
     // Get VOD info
@@ -207,7 +209,7 @@ pub(crate) async fn vod_info(client: &Client, vod_id: &str) -> Result<VodInfo> {
         .await?;
 
     // Get videos
-    let videos = vod_videos(client, &VideoIds::Extension(resp.extension.video), &secret).await?;
+    let videos = vod_videos(client, auth, &VideoIds::Extension(resp.extension.video), &secret).await?;
 
     let info = VodInfo {
         title: resp.title,
@@ -224,18 +226,21 @@ pub(crate) async fn vod_info(client: &Client, vod_id: &str) -> Result<VodInfo> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::utils::{setup, LOGIN_INFO};
 
     #[tokio::test]
     async fn get_vod_info() {
         let client = Client::new();
-        let vod_info = vod_info(&client, "2-106178776").await.unwrap();
+        let auth = LOGIN_INFO.get_or_init(setup()).await;
+        let vod_info = vod_info(&client, auth, "2-106178776").await.unwrap();
         dbg!(vod_info);
     }
 
     #[tokio::test]
     async fn get_vod_info_vlive() {
         let client = Client::new();
-        let vod_info = vod_info(&client, "1-105466775").await.unwrap();
+        let auth = LOGIN_INFO.get_or_init(setup()).await;
+        let vod_info = vod_info(&client, auth, "1-105466775").await.unwrap();
         dbg!(vod_info);
     }
 }

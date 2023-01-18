@@ -5,4 +5,4 @@ mod error;
 mod utils;
 
 pub use auth::LoginInfo;
-pub use client::{AuthenticatedWeverseClient, WeverseClient};
+pub use client::AuthenticatedWeverseClient;
