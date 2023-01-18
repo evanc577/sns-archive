@@ -202,6 +202,7 @@ pub(crate) async fn vod_info(client: &Client, auth: &str, vod_id: &str) -> Resul
     let resp = client
         .get(url.as_str())
         .header(header::REFERER, REFERER)
+        .header(header::AUTHORIZATION, auth)
         .send()
         .await?
         .error_for_status()?

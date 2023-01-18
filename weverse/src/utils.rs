@@ -59,6 +59,5 @@ pub async fn setup() -> String {
     let login_info = LoginInfo { email, password };
 
     let client = Client::new();
-    let auth = login(&client, &login_info).await.unwrap();
-    format!("Bearer {}", auth)
+    login(&client, &login_info).await.unwrap()
 }
