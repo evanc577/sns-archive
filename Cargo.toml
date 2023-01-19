@@ -1,6 +1,12 @@
 [workspace]
 members = ["common", "weverse", "weverse/vod-downloader", "sns-archive"]
 
+[workspace.package]
+version = "0.1.0"
+authors = ["Evan Chang"]
+description = "Unified social media archiver"
+license = "GPL-3.0-only"
+
 [workspace.dependencies]
 anyhow = "1.0"
 async-once-cell = "0.4"
