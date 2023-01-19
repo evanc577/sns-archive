@@ -14,6 +14,6 @@ pub struct NPMember {
     #[serde(default, deserialize_with = "super::deserialize_regex_option")]
     pub filter: Option<Regex>,
     pub limit: Option<usize>,
-    #[serde(deserialize_with = "super::deserialize_directory")]
+    #[serde(deserialize_with = "super::deserialize_path")]
     pub download_path: PathBuf,
 }

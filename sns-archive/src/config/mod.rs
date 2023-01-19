@@ -34,7 +34,7 @@ impl Config {
     }
 }
 
-fn deserialize_directory<'de, D>(deserializer: D) -> Result<PathBuf, D::Error>
+fn deserialize_path<'de, D>(deserializer: D) -> Result<PathBuf, D::Error>
 where
     D: Deserializer<'de>,
 {

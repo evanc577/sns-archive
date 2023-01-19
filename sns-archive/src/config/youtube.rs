@@ -4,8 +4,11 @@ use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
 pub struct YoutubeConfig {
-    #[serde(deserialize_with = "super::deserialize_directory")]
+    #[serde(deserialize_with = "super::deserialize_path")]
     pub download_path: PathBuf,
+    #[serde(deserialize_with = "super::deserialize_path")]
+    #[serde(default = "default_archive")]
+    pub archive_path: PathBuf,
     pub channels: Vec<YTChannel>,
     pub filter: String,
 }
@@ -26,4 +29,8 @@ pub struct YTChannel {
 
 const fn default_true() -> bool {
     true
+}
+
+fn default_archive() -> PathBuf {
+    "downloaded.txt".into()
 }

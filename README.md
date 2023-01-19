@@ -33,6 +33,7 @@ users = ["hf_dreamcatcher"]
 
 [youtube]
 download_path = "sns/youtube"
+archive_path = "sns/youtube/downloaded.txt"
 filter = "dreamcatcher|(dream catcher)|드림캐쳐"
 channels = [
   { channel_id = "UCxGkExhl-tIwOt7E-DoVJWg", display_name = "seezn", enabled = false, apply_filter = true },

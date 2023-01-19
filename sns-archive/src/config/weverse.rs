@@ -14,9 +14,9 @@ pub struct WeverseConfig {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct ArtistConfig {
-    #[serde(deserialize_with = "super::deserialize_directory")]
+    #[serde(deserialize_with = "super::deserialize_path")]
     pub artist_download_path: PathBuf,
-    #[serde(deserialize_with = "super::deserialize_directory")]
+    #[serde(deserialize_with = "super::deserialize_path")]
     pub moments_download_path: PathBuf,
 }
 
