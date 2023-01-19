@@ -7,6 +7,7 @@ use reqwest::Client;
 use crate::auth::{login, LoginInfo};
 use crate::endpoint::artist_tab_posts::ArtistPosts;
 use crate::endpoint::community_id::{community_id, CommunityId};
+use crate::endpoint::moments::Moments;
 use crate::endpoint::post::{post, ArtistPost};
 use crate::endpoint::vod::{vod_info, VodInfo};
 
@@ -39,6 +40,11 @@ impl<'a> AuthenticatedWeverseClient<'a> {
     pub async fn artist_posts(&self, artist: &str) -> Result<ArtistPosts> {
         let community_id = self.get_community_id(artist).await?;
         Ok(ArtistPosts::init(community_id, self.auth.clone()))
+    }
+
+    pub async fn artist_moments(&self, artist: &str) -> Result<Vec<ArtistPost>> {
+        let community_id = self.get_community_id(artist).await?;
+        Moments::get_latest_moments(self.reqwest_client, &self.auth, community_id).await
     }
 
     pub async fn post(&self, post_id: &str) -> Result<ArtistPost> {

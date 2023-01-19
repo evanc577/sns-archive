@@ -12,8 +12,7 @@ use reqwest::Client;
 use time::format_description;
 use unicode_segmentation::UnicodeSegmentation;
 use weverse::endpoint::vod::VodInfo;
-use weverse::AuthenticatedWeverseClient;
-use weverse::LoginInfo;
+use weverse::{AuthenticatedWeverseClient, LoginInfo};
 
 #[derive(Parser)]
 struct Args {
@@ -64,7 +63,10 @@ async fn main() -> Result<()> {
 
     // Fetch VOD info
     let reqwest_client = Client::new();
-    let login_info = LoginInfo { email: args.email, password: args.password };
+    let login_info = LoginInfo {
+        email: args.email,
+        password: args.password,
+    };
     let weverse_client = AuthenticatedWeverseClient::login(&reqwest_client, &login_info).await?;
     let info = weverse_client.vod_info(post_id).await?;
 

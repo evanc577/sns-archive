@@ -210,7 +210,13 @@ pub(crate) async fn vod_info(client: &Client, auth: &str, vod_id: &str) -> Resul
         .await?;
 
     // Get videos
-    let videos = vod_videos(client, auth, &VideoIds::Extension(resp.extension.video), &secret).await?;
+    let videos = vod_videos(
+        client,
+        auth,
+        &VideoIds::Extension(resp.extension.video),
+        &secret,
+    )
+    .await?;
 
     let info = VodInfo {
         title: resp.title,

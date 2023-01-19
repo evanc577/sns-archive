@@ -25,59 +25,110 @@ use crate::utils::{deserialize_timestamp, slug};
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ArtistPost {
-    pub attachment: PostAttachment,
+    attachment: PostAttachment,
+    extension: Option<MomentMedia>,
     #[serde(rename = "publishedAt")]
     #[serde(deserialize_with = "deserialize_timestamp")]
     #[serde(serialize_with = "rfc3339::serialize")]
-    pub time: OffsetDateTime,
-    pub post_type: String,
-    pub section_type: String,
+    time: OffsetDateTime,
+    post_type: PostType,
+    section_type: String,
     #[serde(rename = "postId")]
-    pub id: String,
-    pub body: String,
-    pub plain_body: String,
-    pub author: Member,
-    pub community: Community,
+    id: String,
+    body: String,
+    plain_body: String,
+    author: Member,
+    community: Community,
+    author_moment_posts: Option<AuthorMomentPosts>,
     #[serde(skip)]
     auth: String,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
-pub struct PostAttachment {
-    pub photo: Option<HashMap<String, Photo>>,
-    pub video: Option<HashMap<String, Video>>,
+struct PostAttachment {
+    photo: Option<HashMap<String, Photo>>,
+    video: Option<HashMap<String, Video>>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
-pub struct Photo {
-    pub url: String,
-    pub width: u64,
-    pub height: u64,
+enum MomentMedia {
+    #[serde(rename = "momentW1")]
+    Photo(W1Moment),
+    #[serde(rename = "moment")]
+    Video { video: Video },
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(untagged)]
+enum W1Moment {
+    Photo { photo: Photo },
+    BgImage(Photo),
+}
+
+impl W1Moment {
+    fn photo(&self) -> &Photo {
+        match self {
+            Self::Photo { photo: p } => p,
+            Self::BgImage(p) => p,
+        }
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+struct Photo {
+    #[serde(alias = "backgroundImageUrl")]
+    url: String,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct Video {
-    pub upload_info: VideoUploadInfo,
+struct Video {
+    upload_info: VideoUploadInfo,
     #[serde(rename = "videoId")]
-    pub id: String,
+    id: String,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct VideoUploadInfo {
-    pub width: u64,
-    pub height: u64,
+struct VideoUploadInfo {
+    width: u64,
+    height: u64,
     #[serde(rename = "videoId")]
-    pub id: String,
+    id: String,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
-pub struct Community {
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+enum PostType {
+    Normal,
+    Moment,
+    MomentW1,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+struct Community {
     #[serde(rename = "communityId")]
-    pub id: CommunityId,
+    id: CommunityId,
     #[serde(rename = "communityName")]
-    pub name: String,
+    name: String,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+struct AuthorMomentPosts {
+    data: Vec<MomentData>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+struct MomentData {
+    #[serde(rename = "postId")]
+    id: String,
+    #[serde(rename = "publishedAt")]
+    #[serde(deserialize_with = "deserialize_timestamp")]
+    #[serde(serialize_with = "rfc3339::serialize")]
+    time: OffsetDateTime,
+    author: Member,
+    plain_body: String,
 }
 
 pub(crate) async fn post(client: &Client, auth: &str, post_id: &str) -> Result<ArtistPost> {
@@ -145,6 +196,20 @@ impl SavablePost for ArtistPost {
 }
 
 impl ArtistPost {
+    pub fn next_moment_id(&self) -> Option<String> {
+        self.author_moment_posts
+            .as_ref()
+            .map(|mps| {
+                mps.data
+                    .iter()
+                    .skip_while(|m| m.id != self.id)
+                    .skip(1)
+                    .next()
+                    .map(|m| m.id.clone())
+            })
+            .flatten()
+    }
+
     async fn write_info(&self, directory: impl AsRef<Path>) -> Result<()> {
         let info = serde_json::to_vec_pretty(self)?;
         let filename = directory.as_ref().join(format!("{}.json", self.slug()?));
@@ -158,7 +223,16 @@ impl ArtistPost {
         client: &Client,
         directory: impl AsRef<Path>,
     ) -> Vec<Result<()>> {
-        futures::stream::iter(self.photos())
+        let photos = self.photos().chain(
+            self.extension
+                .as_ref()
+                .and_then(|e| match e {
+                    MomentMedia::Photo(p) => Some(p.photo().clone()),
+                    _ => None,
+                })
+                .into_iter(),
+        );
+        futures::stream::iter(photos)
             .enumerate()
             .map(|(i, p)| self.download_photo(client, p, i, directory.as_ref()))
             .buffered(usize::MAX)
@@ -172,7 +246,16 @@ impl ArtistPost {
         auth: &str,
         directory: impl AsRef<Path>,
     ) -> Vec<Result<()>> {
-        futures::stream::iter(self.videos())
+        let videos = self.videos().chain(
+            self.extension
+                .as_ref()
+                .and_then(|e| match e {
+                    MomentMedia::Video { video: v } => Some(v.clone()),
+                    _ => None,
+                })
+                .into_iter(),
+        );
+        futures::stream::iter(videos)
             .enumerate()
             .map(|(i, v)| self.download_video(client, auth, v, i, directory.as_ref()))
             .buffered(usize::MAX)
@@ -272,5 +355,40 @@ mod test {
         let auth = LOGIN_INFO.get_or_init(setup()).await;
         let post = post(&client, auth, "5-2849541rq3").await;
         assert!(post.is_err());
+    }
+
+    #[tokio::test]
+    async fn moment_post_video() {
+        let client = Client::new();
+        let auth = LOGIN_INFO.get_or_init(setup()).await;
+        let post = post(&client, auth, "4-111010672").await.unwrap();
+        assert!(!post.author_moment_posts.unwrap().data.is_empty());
+        assert!(matches!(post.extension.unwrap(), MomentMedia::Video { .. }));
+    }
+
+    #[tokio::test]
+    async fn moment_post_photo() {
+        let client = Client::new();
+        let auth = LOGIN_INFO.get_or_init(setup()).await;
+        let post = post(&client, auth, "2-247595").await.unwrap();
+        assert!(!post.author_moment_posts.unwrap().data.is_empty());
+        assert!(matches!(post.extension.unwrap(), MomentMedia::Photo { .. }));
+    }
+
+    #[tokio::test]
+    async fn moment_post_bgimage() {
+        let client = Client::new();
+        let auth = LOGIN_INFO.get_or_init(setup()).await;
+        let post = post(&client, auth, "1-14373893").await.unwrap();
+        assert!(!post.author_moment_posts.unwrap().data.is_empty());
+        assert!(matches!(post.extension.unwrap(), MomentMedia::Photo { .. }));
+    }
+
+    #[tokio::test]
+    async fn next_moment() {
+        let client = Client::new();
+        let auth = LOGIN_INFO.get_or_init(setup()).await;
+        let post = post(&client, auth, "2-103571496").await.unwrap();
+        assert_eq!(post.next_moment_id(), Some(String::from("2-103510239")))
     }
 }
