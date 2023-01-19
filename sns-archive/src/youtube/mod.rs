@@ -1,40 +1,48 @@
-use std::ffi::OsString;
+use std::fmt::Display;
 use std::fs;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
-use anyhow::{anyhow, Result};
-
 use crate::config::youtube::{YTChannel, YoutubeConfig};
 
-//fn main() -> Result<(), ()> {
-//let config = read_config();
+#[derive(Debug)]
+pub struct YTError(Vec<YTChannel>);
 
-//download(config.channels.iter(), config.filter.as_str())?;
+impl Display for YTError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "failed to download {} channels:", self.0.len())?;
+        for channel in &self.0 {
+            eprintln!("  {} ({})", channel.channel_id, channel.display_name);
+        }
+        Ok(())
+    }
+}
 
-//Ok(())
-//}
+impl std::error::Error for YTError {}
 
-pub fn download(config: YoutubeConfig) -> Result<()> {
+pub fn download(config: YoutubeConfig) -> Result<(), YTError> {
     let channels = config.channels;
     let filter = config.filter;
+    let mut errored_channels = vec![];
+
     for channel in channels {
+        if !channel.enabled {
+            continue;
+        }
+
         // Check if new channel
-        let new_channel = !directory_exists(&config.download_path.join(&channel.display_name));
-        let tmp_dir = config
-            .download_path
-            .join(format!(".{}.temp", &channel.display_name));
-        let final_dir = config.download_path.join(&channel.display_name);
+        let new_channel = !directory_exists(&channel.display_name);
+        let tmp_dir = format!(".{}.temp", &channel.display_name);
         let target_dir = match new_channel {
             true => {
                 fs::create_dir_all(&tmp_dir).unwrap();
                 &tmp_dir
             }
-            false => &final_dir,
+            false => &channel.display_name,
         };
 
         // Build and run yt-dl command
-        let args = generate_cmd_args(&channel, &target_dir, &filter, new_channel)?;
+        let args = generate_cmd_args(&channel, &target_dir, &filter, new_channel);
         let output = Command::new("yt-dlp")
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
@@ -43,80 +51,76 @@ pub fn download(config: YoutubeConfig) -> Result<()> {
             .expect("Failed to execute command");
         if !output.status.success() {
             eprintln!("{}", output.status);
-            return Err(anyhow!("yt-dlp failed"));
+            errored_channels.push(channel);
+            continue;
         }
 
         if new_channel {
-            fs::rename(&tmp_dir, &final_dir).unwrap_or_else(|_| {
-                panic!(
-                    "Could not rename directory {:?} to {:?}",
-                    &tmp_dir, &final_dir
-                )
-            });
+            fs::rename(&tmp_dir, &channel.display_name).expect(&format!(
+                "Could not rename directory {} to {}",
+                &tmp_dir, &channel.display_name
+            ));
         }
     }
 
-    Ok(())
+    if errored_channels.is_empty() {
+        Ok(())
+    } else {
+        Err(YTError(errored_channels))
+    }
 }
 
 fn generate_cmd_args(
     channel: &YTChannel,
-    target_dir: impl AsRef<Path>,
+    target_dir: &str,
     default_filter: &str,
     new_channel: bool,
-) -> Result<Vec<OsString>> {
+) -> Vec<String> {
     let mut args = vec![
-        OsString::from("--format-sort"),
-        "res,fps,vcodec,acodec".into(),
-        "--ignore-config".into(),
-        "--verbose".into(),
-        "--all-subs".into(),
-        "--embed-subs".into(),
-        "--compat-options".into(),
-        "no-live-chat".into(),
-        "--ignore-errors".into(),
-        "--match-filter".into(),
-        "!is_live".into(),
-        "--remux-video".into(),
-        "mkv".into(),
-        "--output".into(),
-        target_dir
-            .as_ref()
+        "--format-sort".to_string(),
+        "res,fps,vcodec,acodec".to_string(),
+        "--ignore-config".to_string(),
+        "--all-subs".to_string(),
+        "--embed-subs".to_string(),
+        "--compat-options".to_string(),
+        "no-live-chat".to_string(),
+        "--ignore-errors".to_string(),
+        "--match-filter".to_string(),
+        "!is_live".to_string(),
+        "--remux-video".to_string(),
+        "mkv".to_string(),
+        "--output".to_string(),
+        Path::new(&target_dir)
             .join("%(upload_date)s_%(title)s_%(id)s.%(ext)s")
-            .into(),
+            .to_str()
+            .unwrap()
+            .to_owned(),
     ];
 
     if channel.apply_filter {
-        args.push("--match-title".into());
+        args.push("--match-title".to_string());
         match &channel.custom_filter {
-            Some(f) => args.push(f.into()),
-            None => args.push(default_filter.into()),
+            Some(f) => args.push(f.to_string()),
+            None => args.push(default_filter.to_string()),
         }
     }
 
     if !channel.always_redownload {
-        args.push("--download-archive".into());
-        args.push(
-            target_dir
-                .as_ref()
-                .parent()
-                .unwrap()
-                .join("downloaded.txt")
-                .into(),
-        );
+        args.push("--download-archive".to_string());
+        args.push("downloaded.txt".to_string());
     }
 
     if !new_channel {
-        args.push("--playlist-end".into());
+        args.push("--playlist-end".to_string());
         match channel.playlist_end {
-            Some(end) => args.push(end.to_string().into()),
-            None => args.push("100".into()),
+            Some(end) => args.push(end.to_string()),
+            None => args.push("100".to_string()),
         }
     }
 
-    args.push(channel_id_to_url(&channel.channel_id).into());
+    args.push(channel_id_to_url(&channel.channel_id));
 
-    Ok(args)
+    args
 }
 
 fn directory_exists(path: &impl AsRef<Path>) -> bool {

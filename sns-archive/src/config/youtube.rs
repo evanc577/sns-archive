@@ -20,4 +20,10 @@ pub struct YTChannel {
     pub always_redownload: bool,
     pub custom_filter: Option<String>,
     pub playlist_end: Option<usize>,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+const fn default_true() -> bool {
+    true
 }
