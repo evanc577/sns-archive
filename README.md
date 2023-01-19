@@ -7,6 +7,8 @@ Currently supports:
 * Twitter
 * Weverse
 * Youtube
+* Naver post
+* Xiaohongshu (experimental, requires json from app)
 
 ## Usage
 
@@ -16,28 +18,32 @@ Sample:
 
 ```toml
 [weverse]
-cookies_file = "" # Cookies file for weverse.io in netscape format
-max_connections = 20
+email = "" # Weverse email
+password = "" # Weverse password
 
 [weverse.artists.dreamcatcher]
 artist_download_path = "sns/weverse/artist"
 moments_download_path = "sns/weverse/moments"
-videos_download_path = "sns/weverse/videos"
-recent_artist = 10
-recent_moments = 10
 
 [twitter]
 bearer = "" # Twitter API bearer token
 download_path = "sns/twitter"
 timezone_offset = 32400
-users = [
-    "hf_dreamcatcher",
-]
+users = ["hf_dreamcatcher"]
 
 [youtube]
 download_path = "sns/youtube"
 filter = "dreamcatcher|(dream catcher)|드림캐쳐"
 channels = [
-    { channel_id = "UCxGkExhl-tIwOt7E-DoVJWg", display_name = "seezn", apply_filter = true },
+  { channel_id = "UCxGkExhl-tIwOt7E-DoVJWg", display_name = "seezn", enabled = false, apply_filter = true },
+  { channel_id = "UCwnBKt1bJfKXGH2Q1IaTnAw", display_name = "e.L.e", apply_filter = true },
 ]
+
+[[naver_post.members]]
+id = "29156514"
+download_path = "sns/naver_post/dreamcatcher_company"
+limit = 5
+
+[xiaohongshu]
+download_path = "sns/xiaohongshu"
 ```
