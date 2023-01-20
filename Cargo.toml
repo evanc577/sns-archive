@@ -2,7 +2,7 @@
 members = ["common", "weverse", "weverse/vod-downloader", "sns-archive"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Evan Chang"]
 description = "Unified social media archiver"
 license = "GPL-3.0-only"
