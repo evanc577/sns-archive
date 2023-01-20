@@ -40,9 +40,7 @@ pub fn download(config: YoutubeConfig) -> Result<(), YTError> {
             PathBuf::from(temp_str)
         };
         let target_dir = match new_channel {
-            true => {
-                &tmp_dir
-            }
+            true => &tmp_dir,
             false => &dir,
         };
 

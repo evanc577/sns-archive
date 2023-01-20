@@ -20,6 +20,7 @@ struct Args {
 
 #[derive(Subcommand, Debug)]
 enum Sns {
+    /// Download Twitter tweets
     Twitter {
         /// Read tweets to save from input file, 1 tweet ID per line
         #[clap(short, long, value_parser)]
@@ -29,9 +30,30 @@ enum Sns {
         #[clap(short, long, value_parser)]
         filter: Option<String>,
     },
+    /// Download Weverse posts and moments
+    ///
+    /// Example config.toml section:
+    ///
+    /// [weverse]
+    /// # Weverse login information
+    /// email = ""
+    /// password = ""
+    /// # Maximum number of concurrent network connections (optional, default 20)
+    /// max_connections = {integer}
+    ///
+    /// # Section for each artist to archive
+    /// [weverse.artists.dreamcatcher]
+    /// # Directory to save artist posts (optional, don't download posts if none)
+    /// artist_download_path = "path/to/directory"
+    /// # Directory to save artist moments (optiona, don't download moments if none)
+    /// moments_download_path = "path/to/directory"
+    #[clap(verbatim_doc_comment)]
     Weverse,
+    /// Download Youtube videos
     Youtube,
+    /// Download Naver post images
     NaverPost,
+    /// (Experimental) Download Xiao Hong Shu images and videos
     XiaoHongShu {
         /// API response from XiaoHongShu app from endpoint
         /// https://edith.xiaohongshu.com/api/sns/v4/note/user/posted

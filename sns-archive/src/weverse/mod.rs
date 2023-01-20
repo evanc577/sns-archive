@@ -10,7 +10,7 @@ use weverse::endpoint::artist_tab_posts::ArtistPostShort;
 use weverse::endpoint::post::ArtistPost;
 use weverse::{AuthenticatedWeverseClient, LoginInfo};
 
-use crate::config::weverse::{ArtistConfig, WeverseConfig};
+use crate::config::weverse::WeverseConfig;
 
 pub async fn download(conf: WeverseConfig) -> Result<()> {
     let client = Client::new();
@@ -24,14 +24,14 @@ pub async fn download(conf: WeverseConfig) -> Result<()> {
 
     for (artist, artist_config) in conf.artists {
         // Download posts
-        {
+        if let Some(artist_download_path) = &artist_config.artist_download_path {
             println!("Downloading {} posts", artist);
             let mut posts = weverse_client.artist_posts(&artist).await?;
             let posts_stream = posts.as_stream(&client).await;
             futures::pin_mut!(posts_stream);
-            fs::create_dir_all(&artist_config.artist_download_path).await?;
+            fs::create_dir_all(artist_download_path).await?;
             posts_stream
-                .map(|p| download_post(&artist_config, &client, &weverse_client, p))
+                .map(|p| download_post(artist_download_path, &client, &weverse_client, p))
                 .buffered(conf.max_connections)
                 .take_while(|r| {
                     let ret = match r {
@@ -50,13 +50,18 @@ pub async fn download(conf: WeverseConfig) -> Result<()> {
         }
 
         // Download moments
-        {
+        if let Some(moments_download_path) = &artist_config.moments_download_path {
             println!("Downloading {} moments", artist);
             let latest_moments = weverse_client.artist_moments(&artist).await?;
-            fs::create_dir_all(&artist_config.moments_download_path).await?;
+            fs::create_dir_all(moments_download_path).await?;
             stream::iter(latest_moments.iter())
                 .map(|p| {
-                    download_member_moments(&artist_config, &client, &weverse_client, p.clone())
+                    download_member_moments(
+                        moments_download_path,
+                        &client,
+                        &weverse_client,
+                        p.clone(),
+                    )
                 })
                 .buffer_unordered(conf.max_connections)
                 .collect::<Vec<_>>()
@@ -95,24 +100,24 @@ enum DownloadStatus {
 }
 
 async fn download_post(
-    artist_config: &ArtistConfig,
+    download_dir: impl AsRef<Path>,
     client: &Client,
     weverse_client: &AuthenticatedWeverseClient<'_>,
     post: Result<ArtistPostShort>,
 ) -> Result<DownloadStatus> {
     let post = post?;
     let slug = post.slug()?;
-    if artist_config.artist_download_path.join(&slug).exists() {
+    if download_dir.as_ref().join(&slug).exists() {
         return Ok(DownloadStatus::Skipped);
     }
     let post = weverse_client.post(&post.post_id).await?;
 
-    download_post_real(&artist_config.artist_download_path, client, &post).await?;
+    download_post_real(download_dir.as_ref(), client, &post).await?;
     Ok(DownloadStatus::Downloaded)
 }
 
 async fn download_member_moments(
-    artist_config: &ArtistConfig,
+    download_dir: impl AsRef<Path>,
     client: &Client,
     weverse_client: &AuthenticatedWeverseClient<'_>,
     first_post: ArtistPost,
@@ -120,10 +125,10 @@ async fn download_member_moments(
     let mut post = first_post;
     loop {
         let slug = post.slug()?;
-        if artist_config.moments_download_path.join(&slug).exists() {
+        if download_dir.as_ref().join(&slug).exists() {
             break;
         }
-        download_post_real(&artist_config.moments_download_path, client, &post).await?;
+        download_post_real(download_dir.as_ref(), client, &post).await?;
         if let Some(next_post_id) = post.next_moment_id() {
             post = weverse_client.post(&next_post_id).await?;
         } else {

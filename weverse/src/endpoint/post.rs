@@ -7,7 +7,7 @@ use futures::StreamExt;
 use lazy_static::lazy_static;
 use regex::Regex;
 use reqwest::{header, Client, Url};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use sns_archive_common::{set_mtime, streamed_download, SavablePost};
 use time::serde::rfc3339;
 use time::OffsetDateTime;
@@ -26,6 +26,7 @@ use crate::utils::{deserialize_timestamp, slug};
 #[serde(rename_all = "camelCase")]
 pub struct ArtistPost {
     attachment: PostAttachment,
+    #[serde(deserialize_with = "object_empty_as_none")]
     extension: Option<MomentMedia>,
     #[serde(rename = "publishedAt")]
     #[serde(deserialize_with = "deserialize_timestamp")]
@@ -44,20 +45,49 @@ pub struct ArtistPost {
     auth: String,
 }
 
+/// Weverse sometimes returns "extension": {}, treat as None
+fn object_empty_as_none<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    for<'a> T: Deserialize<'a>,
+{
+    #[derive(Deserialize, Debug)]
+    #[serde(deny_unknown_fields)]
+    struct Empty {}
+
+    #[derive(Deserialize, Debug)]
+    #[serde(untagged)]
+    enum Aux<T> {
+        T(T),
+        Empty(Empty),
+        Null,
+    }
+
+    match Aux::deserialize(deserializer)? {
+        Aux::T(t) => Ok(Some(t)),
+        Aux::Empty(_) | Aux::Null => Ok(None),
+    }
+}
+
+/// Maps id to photo/video
 #[derive(Deserialize, Serialize, Clone, Debug)]
 struct PostAttachment {
     photo: Option<HashMap<String, Photo>>,
     video: Option<HashMap<String, Video>>,
 }
 
+/// Moments contain either 1 photo or 1 video
 #[derive(Deserialize, Serialize, Clone, Debug)]
 enum MomentMedia {
     #[serde(rename = "momentW1")]
     Photo(W1Moment),
     #[serde(rename = "moment")]
     Video { video: Video },
+    #[serde(other)]
+    Empty,
 }
 
+/// Legacy moment photo, BgImage is used for Weverse-default backgrounds
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(untagged)]
 enum W1Moment {
@@ -102,6 +132,7 @@ struct VideoUploadInfo {
 enum PostType {
     Normal,
     Moment,
+    /// Legacy moment
     MomentW1,
 }
 
@@ -113,6 +144,7 @@ struct Community {
     name: String,
 }
 
+/// Contains some of the artists moments before and after the current one
 #[derive(Deserialize, Serialize, Clone, Debug)]
 struct AuthorMomentPosts {
     data: Vec<MomentData>,
@@ -131,6 +163,7 @@ struct MomentData {
     plain_body: String,
 }
 
+/// Fetch a post given with a post ID
 pub(crate) async fn post(client: &Client, auth: &str, post_id: &str) -> Result<ArtistPost> {
     let secret = get_secret(client).await?;
 
@@ -196,6 +229,7 @@ impl SavablePost for ArtistPost {
 }
 
 impl ArtistPost {
+    /// Returns the next newest moment after the current one
     pub fn next_moment_id(&self) -> Option<String> {
         self.author_moment_posts
             .as_ref()
@@ -210,6 +244,7 @@ impl ArtistPost {
             .flatten()
     }
 
+    /// Write all data as a json file
     async fn write_info(&self, directory: impl AsRef<Path>) -> Result<()> {
         let info = serde_json::to_vec_pretty(self)?;
         let filename = directory.as_ref().join(format!("{}.json", self.slug()?));
@@ -223,6 +258,7 @@ impl ArtistPost {
         client: &Client,
         directory: impl AsRef<Path>,
     ) -> Vec<Result<()>> {
+        // Download both regular and moments photos
         let photos = self.photos().chain(
             self.extension
                 .as_ref()
@@ -246,6 +282,7 @@ impl ArtistPost {
         auth: &str,
         directory: impl AsRef<Path>,
     ) -> Vec<Result<()>> {
+        // Download both regular and moments videos
         let videos = self.videos().chain(
             self.extension
                 .as_ref()

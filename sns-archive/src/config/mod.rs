@@ -42,6 +42,15 @@ where
     s.expand_home().map_err(D::Error::custom)
 }
 
+fn deserialize_option_path<'de, D>(deserializer: D) -> Result<Option<PathBuf>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s: Option<PathBuf> = Deserialize::deserialize(deserializer)?;
+    s.map(|p| p.expand_home().map_err(D::Error::custom))
+        .transpose()
+}
+
 fn deserialize_regex_option<'de, D>(deserializer: D) -> Result<Option<Regex>, D::Error>
 where
     D: Deserializer<'de>,
