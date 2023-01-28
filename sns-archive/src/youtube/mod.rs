@@ -96,7 +96,7 @@ fn generate_cmd_args(
         "no-live-chat".into(),
         "--ignore-errors".into(),
         "--match-filter".into(),
-        "!is_live".into(),
+        "live_status != is_live & live_status != is_upcoming".into(),
         "--remux-video".into(),
         "mkv".into(),
         "--output".into(),
