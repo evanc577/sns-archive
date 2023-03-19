@@ -61,6 +61,8 @@ enum Sns {
         #[clap(value_parser)]
         json_file: PathBuf,
     },
+    /// Download Weibo user posts
+    Weibo,
 }
 
 fn default_config_path() -> PathBuf {
@@ -122,6 +124,13 @@ async fn run() -> Result<()> {
                 sns_archive::xiaohongshu::download(f, conf).await?;
             } else {
                 return Err(anyhow!("Missing xiaohongshu section in config file"));
+            }
+        }
+        Sns::Weibo => {
+            if let Some(conf) = conf.weibo {
+                sns_archive::weibo::download(conf).await?;
+            } else {
+                return Err(anyhow!("Missing weibo section in config file"));
             }
         }
     }

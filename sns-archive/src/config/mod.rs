@@ -8,6 +8,7 @@ use serde::{Deserialize, Deserializer};
 
 use self::naver_post::NaverPostConfig;
 use self::twitter::TwitterConfig;
+use self::weibo::WeiboConfig;
 use self::weverse::WeverseConfig;
 use self::xiaohongshu::XiaoHongShuConfig;
 use self::youtube::YoutubeConfig;
@@ -17,6 +18,7 @@ pub mod twitter;
 pub mod weverse;
 pub mod xiaohongshu;
 pub mod youtube;
+pub mod weibo;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -25,6 +27,7 @@ pub struct Config {
     pub youtube: Option<YoutubeConfig>,
     pub naver_post: Option<NaverPostConfig>,
     pub xiaohongshu: Option<XiaoHongShuConfig>,
+    pub weibo: Option<WeiboConfig>,
 }
 
 impl Config {

@@ -1,19 +1,22 @@
 [package]
-name = "sns_archive_common"
+name = "weibo"
 edition = "2021"
 authors.workspace = true
 version.workspace = true
 description.workspace = true
 license.workspace = true
 
-
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
-filetime = { workspace = true }
 futures = { workspace = true }
-reqwest = { workspace = true, features = ["stream"] }
+once_cell = { workspace = true }
+regex = { workspace = true }
+reqwest = { workspace = true, features = ["json", "cookies"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+sns_archive_common = { path = "../common" }
 time = { workspace = true }
-tokio = { workspace = true, default-features = false }
+tokio = { workspace = true, default-features = false, features = ["fs", "process"] }
