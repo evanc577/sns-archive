@@ -39,7 +39,7 @@ impl Moments {
             .filter_map(|m| m.artist_latest_moment.map(|m| m.id))
             .collect();
         let posts: Vec<_> = stream::iter(moment_ids.iter())
-            .map(|id| post(client, &auth, &id))
+            .map(|id| post(client, auth, id))
             .buffered(20)
             .collect::<Vec<_>>()
             .await

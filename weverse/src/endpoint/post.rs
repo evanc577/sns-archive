@@ -233,15 +233,12 @@ impl ArtistPost {
     pub fn next_moment_id(&self) -> Option<String> {
         self.author_moment_posts
             .as_ref()
-            .map(|mps| {
+            .and_then(|mps| {
                 mps.data
                     .iter()
-                    .skip_while(|m| m.id != self.id)
-                    .skip(1)
-                    .next()
+                    .skip_while(|m| m.id != self.id).nth(1)
                     .map(|m| m.id.clone())
             })
-            .flatten()
     }
 
     /// Write all data as a json file

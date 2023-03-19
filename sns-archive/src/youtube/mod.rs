@@ -13,7 +13,7 @@ impl Display for YTError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "failed to download {} channels:", self.0.len())?;
         for channel in &self.0 {
-            eprintln!("  {} ({})", channel.channel_id, channel.display_name);
+            writeln!(f, "  {} ({})", channel.channel_id, channel.display_name)?;
         }
         Ok(())
     }
@@ -47,7 +47,7 @@ pub fn download(config: YoutubeConfig) -> Result<(), YTError> {
         // Build and run yt-dl command
         let args = generate_cmd_args(
             &channel,
-            &target_dir,
+            target_dir,
             &filter,
             new_channel,
             &config.archive_path,
@@ -65,10 +65,8 @@ pub fn download(config: YoutubeConfig) -> Result<(), YTError> {
         }
 
         if new_channel {
-            fs::rename(&tmp_dir, &dir).expect(&format!(
-                "Could not rename directory {:?} to {:?}",
-                &tmp_dir, &dir
-            ));
+            fs::rename(&tmp_dir, &dir).unwrap_or_else(|_| panic!("Could not rename directory {:?} to {:?}",
+                &tmp_dir, &dir));
         }
     }
 

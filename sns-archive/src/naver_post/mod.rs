@@ -258,7 +258,7 @@ async fn download_np(vol: &Volume, path: &Path) -> Result<()> {
     }
 
     // create base directory if it doesn't exist
-    let _ = std::fs::create_dir_all(&path);
+    let _ = std::fs::create_dir_all(path);
 
     // create progress bar
     let pb = ProgressBar::new(imgs.len() as u64);
@@ -287,8 +287,8 @@ async fn download_np(vol: &Volume, path: &Path) -> Result<()> {
             .file_name()
             .ok_or_else(|| DownloadNPError::FileNameError(temp_dir.path().to_path_buf()))?,
     );
-    fs_extra::dir::copy(&temp_dir, &path, &options)?;
-    std::fs::rename(&temp_dir_2, &full_path)?;
+    fs_extra::dir::copy(&temp_dir, path, &options)?;
+    std::fs::rename(temp_dir_2, &full_path)?;
 
     pb.finish_and_clear();
 
