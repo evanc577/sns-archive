@@ -9,6 +9,7 @@ Currently supports:
 * Youtube
 * Naver post
 * Xiaohongshu (experimental, requires json from app)
+* Weibo
 
 ## Usage
 
@@ -24,6 +25,11 @@ password = "" # Weverse password
 [weverse.artists.dreamcatcher]
 artist_download_path = "sns/weverse/artist"
 moments_download_path = "sns/weverse/moments"
+
+[weibo]
+users = [
+  { user = 7317173686, download_path = "sns/weibo/韩东_捕梦网" },
+]
 
 [twitter]
 bearer = "" # Twitter API bearer token
