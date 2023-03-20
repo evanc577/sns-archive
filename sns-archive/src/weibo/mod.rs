@@ -53,7 +53,7 @@ struct Error;
 
 impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "errors occured wile downloading Weverse posts")
+        write!(f, "errors occured wile downloading Weibo posts")
     }
 }
 
