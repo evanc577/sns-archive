@@ -65,8 +65,9 @@ pub fn download(config: YoutubeConfig) -> Result<(), YTError> {
         }
 
         if new_channel {
-            fs::rename(&tmp_dir, &dir).unwrap_or_else(|_| panic!("Could not rename directory {:?} to {:?}",
-                &tmp_dir, &dir));
+            fs::rename(&tmp_dir, &dir).unwrap_or_else(|_| {
+                panic!("Could not rename directory {:?} to {:?}", &tmp_dir, &dir)
+            });
         }
     }
 

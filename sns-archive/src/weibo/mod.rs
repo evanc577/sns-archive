@@ -16,7 +16,11 @@ pub async fn download(conf: WeiboConfig) -> Result<()> {
 
     let mut errored = false;
 
-    for WeiboUserConfig { user, download_path } in conf.users {
+    for WeiboUserConfig {
+        user,
+        download_path,
+    } in conf.users
+    {
         // Download posts
         let mut posts = weibo_client.posts(user).await?;
         let posts_stream = posts.as_stream(&client).await;

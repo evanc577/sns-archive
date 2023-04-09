@@ -1,7 +1,7 @@
 mod client;
+mod weibo_auth;
 mod weibo_post;
 mod weibo_posts;
-mod weibo_auth;
 
 pub use client::WeiboClient;
 pub use weibo_post::WeiboPost;

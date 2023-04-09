@@ -11,12 +11,14 @@ license.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
+indexmap = { workspace = true, features = ["serde"] }
 futures = { workspace = true }
 once_cell = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true, features = ["json", "cookies"] }
 serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true }
+serde_json = { workspace = true, features = ["preserve_order"] }
 sns_archive_common = { path = "../common" }
 time = { workspace = true }
 tokio = { workspace = true, default-features = false, features = ["fs", "process"] }
+url = { workspace = true }

@@ -3,15 +3,16 @@ use std::path::Path;
 
 use anyhow::Result;
 use async_trait::async_trait;
+use indexmap::IndexMap;
 use once_cell::sync::Lazy;
-use reqwest::{Client, Url};
+use reqwest::{header, Client, Url};
 use serde::{Deserialize, Deserializer};
-use sns_archive_common::{set_mtime, SavablePost};
+use sns_archive_common::{set_mtime, streamed_download, SavablePost};
 use time::format_description::well_known::Rfc3339;
 use time::format_description::FormatItem;
 use time::{format_description, OffsetDateTime};
+use tokio::fs;
 use tokio::io::AsyncWriteExt;
-use tokio::{fs, process};
 
 #[derive(Deserialize, Debug)]
 pub struct WeiboPost {
@@ -25,6 +26,14 @@ pub struct WeiboPost {
     pictures: Vec<String>,
     #[serde(rename = "url_struct")]
     urls: Option<Vec<WeiboUrl>>,
+    #[serde(skip)]
+    tid: String,
+}
+
+impl WeiboPost {
+    pub fn set_tid(&mut self, s: String) {
+        self.tid = s;
+    }
 }
 
 fn deserialize_datetime<'de, D>(deserializer: D) -> Result<OffsetDateTime, D::Error>
@@ -86,7 +95,7 @@ impl SavablePost for WeiboPost {
                 if let Some(u) = u.is_video() {
                     let filename = format!("{}-vid{:02}", &slug, i + 1);
                     let path = directory.as_ref().join(&filename);
-                    download_video(&u, path).await?;
+                    download_video(client, &u, path).await?;
                 }
             }
         }
@@ -175,22 +184,56 @@ async fn download_image(client: &Client, img_id: &str, path: impl AsRef<Path>) -
     Ok(())
 }
 
-async fn download_video(url: &str, path: impl AsRef<Path>) -> Result<()> {
-    let status = process::Command::new("lux")
-        .arg("--output-name")
-        .arg(path.as_ref().file_name().unwrap())
-        .arg("--output-path")
-        .arg(path.as_ref().parent().unwrap())
-        .arg(url)
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()?
-        .wait()
-        .await?;
-
-    if !status.success() {
-        return Err(anyhow::anyhow!("lux failed"));
+async fn download_video(client: &Client, url: &str, path: impl AsRef<Path>) -> Result<()> {
+    #[derive(Deserialize)]
+    struct WeiboVideo {
+        data: WeiboData,
     }
+
+    #[derive(Deserialize)]
+    struct WeiboData {
+        #[serde(rename = "Component_Play_Playinfo")]
+        play_info: WeiboPlayInfo,
+    }
+
+    #[derive(Deserialize)]
+    struct WeiboPlayInfo {
+        urls: IndexMap<String, String>,
+    }
+
+    let parsed_url = Url::parse(url)?;
+    let data_url = format!(
+        "https://weibo.com/tv/api/component?page={}",
+        parsed_url.path()
+    );
+    let id = parsed_url.path_segments().unwrap().last().unwrap();
+    let cookie = "SUB=_";
+    let content_type = "application/x-www-form-urlencoded";
+    let data = format!(r#"data={{"Component_Play_Playinfo":{{"oid":"{}"}}}}"#, id);
+
+    let mut video_url = client
+        .post(data_url)
+        .header(header::REFERER, url)
+        .header(header::COOKIE, cookie)
+        .header(header::CONTENT_TYPE, content_type)
+        .body(data)
+        .send()
+        .await?
+        .json::<WeiboVideo>()
+        .await?
+        .data
+        .play_info
+        .urls
+        .first()
+        .unwrap()
+        .1
+        .clone();
+
+    if !video_url.starts_with("http") {
+        video_url = format!("https:{}", video_url)
+    }
+
+    streamed_download(client, video_url, path).await?;
 
     Ok(())
 }

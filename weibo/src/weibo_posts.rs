@@ -1,15 +1,18 @@
 use std::collections::VecDeque;
+use std::time::Duration;
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use futures::Stream;
-use reqwest::{header::COOKIE, Client};
+use reqwest::header::COOKIE;
+use reqwest::{Client, StatusCode};
 use serde::Deserialize;
 
+use crate::weibo_auth::WeiboAuth;
 use crate::weibo_post::WeiboPost;
 
 pub struct WeiboPosts {
     user: u64,
-    cookie: String,
+    auth: WeiboAuth,
     fetch_state: FetchState,
 }
 
@@ -30,10 +33,10 @@ impl Default for FetchState {
 }
 
 impl WeiboPosts {
-    pub(crate) async fn auth(user: u64, cookie: String) -> Self {
+    pub(crate) async fn auth(user: u64, auth: WeiboAuth) -> Self {
         Self {
             user,
-            cookie,
+            auth,
             fetch_state: Default::default(),
         }
     }
@@ -54,7 +57,7 @@ impl WeiboPosts {
                 return Some((Ok(post), state));
             }
 
-            match get_page(client, &state.cookie, state.user, state.fetch_state.page).await {
+            match get_page(client, &state.auth, state.user, state.fetch_state.page).await {
                 Ok(p) => {
                     state.fetch_state.posts.extend(p.into_iter());
                     state.fetch_state.page += 1;
@@ -77,7 +80,7 @@ impl WeiboPosts {
 
 pub async fn get_page(
     client: &Client,
-    cookie: &str,
+    auth: &WeiboAuth,
     uid: u64,
     page: u64,
 ) -> Result<Vec<WeiboPost>> {
@@ -93,16 +96,33 @@ pub async fn get_page(
         list: Vec<WeiboPost>,
     }
 
-    let posts = client
-        .get(URL)
-        .query(&[("uid", &uid.to_string()), ("page", &page.to_string())])
-        .header(COOKIE, format!("SUB={}", cookie))
-        .send()
-        .await?
-        .json::<Mymblog>()
-        .await?
-        .data
-        .list;
+    let mut retry_414 = 0;
+    let mut posts = loop {
+        let resp = client
+            .get(URL)
+            .query(&[("uid", &uid.to_string()), ("page", &page.to_string())])
+            .header(COOKIE, format!("SUB={}", auth.cookies))
+            .send()
+            .await?;
+
+        if resp.status().as_u16() == StatusCode::URI_TOO_LONG {
+            if retry_414 == 0 {
+                eprintln!("status code 414");
+            }
+            if retry_414 >= 10 {
+                return Err(anyhow!("error 414"));
+            }
+            retry_414 += 1;
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            continue;
+        }
+
+        break resp.json::<Mymblog>().await?.data.list;
+    };
+
+    for p in posts.iter_mut() {
+        p.set_tid(auth.tid.clone());
+    }
 
     Ok(posts)
 }

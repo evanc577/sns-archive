@@ -3,10 +3,15 @@ use regex::Regex;
 use reqwest::Client;
 use serde::Deserialize;
 
-pub async fn weibo_cookie(client: &Client) -> Result<String> {
+pub struct WeiboAuth {
+    pub tid: String,
+    pub cookies: String,
+}
+
+pub async fn weibo_cookie(client: &Client) -> Result<WeiboAuth> {
     let tid = get_tid(client).await?;
-    let cookie = get_cookie(client, &tid).await?;
-    Ok(cookie)
+    let cookies = get_cookie(client, &tid).await?;
+    Ok(WeiboAuth { tid, cookies })
 }
 
 async fn get_tid(client: &Client) -> Result<String> {

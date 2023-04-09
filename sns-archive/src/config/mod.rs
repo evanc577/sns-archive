@@ -15,10 +15,10 @@ use self::youtube::YoutubeConfig;
 
 pub mod naver_post;
 pub mod twitter;
+pub mod weibo;
 pub mod weverse;
 pub mod xiaohongshu;
 pub mod youtube;
-pub mod weibo;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {

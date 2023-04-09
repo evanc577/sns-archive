@@ -231,14 +231,13 @@ impl SavablePost for ArtistPost {
 impl ArtistPost {
     /// Returns the next newest moment after the current one
     pub fn next_moment_id(&self) -> Option<String> {
-        self.author_moment_posts
-            .as_ref()
-            .and_then(|mps| {
-                mps.data
-                    .iter()
-                    .skip_while(|m| m.id != self.id).nth(1)
-                    .map(|m| m.id.clone())
-            })
+        self.author_moment_posts.as_ref().and_then(|mps| {
+            mps.data
+                .iter()
+                .skip_while(|m| m.id != self.id)
+                .nth(1)
+                .map(|m| m.id.clone())
+        })
     }
 
     /// Write all data as a json file
