@@ -1849,7 +1849,7 @@ checksum = "a507befe795404456341dfab10cef66ead4c041f62b8b11bbb92bffe5d0953e0"
 
 [[package]]
 name = "sns-archive"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1882,7 +1882,7 @@ dependencies = [
 
 [[package]]
 name = "sns_archive_common"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2452,7 +2452,7 @@ dependencies = [
 
 [[package]]
 name = "weibo"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2471,7 +2471,7 @@ dependencies = [
 
 [[package]]
 name = "weverse"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "anyhow",
  "async-once-cell",
@@ -2498,7 +2498,7 @@ dependencies = [
 
 [[package]]
 name = "weverse-vod-downloader"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "anyhow",
  "clap",
