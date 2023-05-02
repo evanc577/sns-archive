@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use std::time::Duration;
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use futures::Stream;
 use reqwest::header::COOKIE;
 use reqwest::{Client, StatusCode};

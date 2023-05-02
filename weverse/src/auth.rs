@@ -18,7 +18,7 @@ use crate::endpoint::me::me;
 use crate::error::WeverseError;
 
 lazy_static! {
-    static ref JS_RE: Regex = Regex::new(r#"src="(?P<url>.+/main.*\.js)""#).unwrap();
+    static ref JS_RE: Regex = Regex::new(r#"src="(?P<url>[^"]*js/main.\w+\.js[^"]*)""#).unwrap();
     static ref SECRET_RE: Regex = Regex::new(r#"return\s?"(?P<key>[a-fA-F0-9]{16,})""#).unwrap();
 }
 
@@ -41,12 +41,9 @@ pub(crate) async fn get_secret(client: &Client) -> Result<Vec<u8>> {
     let resp = client.get(js_url).send().await?.text().await?;
     let key = SECRET_RE
         .captures(&resp)
-        .ok_or(WeverseError::Auth)?
-        .name("key")
-        .ok_or(WeverseError::Auth)?
-        .as_str()
-        .as_bytes()
-        .to_vec();
+        .and_then(|x| x.name("key"))
+        .map(|x| x.as_str().as_bytes().to_vec())
+        .ok_or(WeverseError::Auth)?;
 
     Ok(key)
 }
