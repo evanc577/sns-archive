@@ -27,7 +27,13 @@ pub async fn download(conf: WeverseConfig) -> Result<()> {
         // Download posts
         if let Some(artist_download_path) = &artist_config.artist_download_path {
             println!("Downloading {} posts", artist);
-            let mut posts = weverse_client.artist_posts(&artist, None).await?;
+            let mut posts = weverse_client
+                .artist_posts(
+                    &artist,
+                    artist_config.artist_stop_id,
+                    artist_config.artist_download_limit,
+                )
+                .await?;
             let posts_stream = posts.as_stream(&client).await;
             futures::pin_mut!(posts_stream);
             fs::create_dir_all(artist_download_path).await?;
@@ -36,7 +42,9 @@ pub async fn download(conf: WeverseConfig) -> Result<()> {
                 .buffered(conf.max_connections)
                 .take_while(|r| {
                     let ret = match r {
-                        Ok(DownloadStatus::Skipped) => false,
+                        Ok(DownloadStatus::Skipped) => {
+                            artist_config.artist_download_limit.is_some()
+                        }
                         Ok(DownloadStatus::Downloaded) => true,
                         Err(e) => {
                             println!("Error: {:?}", e);
@@ -79,7 +87,11 @@ pub async fn download(conf: WeverseConfig) -> Result<()> {
         if let Some(lives_download_path) = &artist_config.lives_download_path {
             println!("Downloading {} lives", artist);
             let mut posts = weverse_client
-                .lives(&artist, artist_config.lives_stop_id)
+                .lives(
+                    &artist,
+                    artist_config.lives_stop_id,
+                    artist_config.lives_download_limit,
+                )
                 .await?;
             let posts_stream = posts.as_stream(&client).await;
             futures::pin_mut!(posts_stream);
@@ -89,7 +101,7 @@ pub async fn download(conf: WeverseConfig) -> Result<()> {
                 .buffered(conf.max_connections)
                 .take_while(|r| {
                     let ret = match r {
-                        Ok(DownloadStatus::Skipped) => false,
+                        Ok(DownloadStatus::Skipped) => artist_config.lives_download_limit.is_some(),
                         Ok(DownloadStatus::Downloaded) => true,
                         Err(e) => {
                             println!("Error: {:?}", e);

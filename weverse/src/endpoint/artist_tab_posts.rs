@@ -32,6 +32,8 @@ pub struct ArtistPosts {
     auth: String,
     tab: Tab,
     min_id: Option<String>,
+    limit: Option<usize>,
+    count: usize,
     // For pagination
     page_state: PageState,
 }
@@ -65,12 +67,15 @@ impl ArtistPosts {
         tab: Tab,
         auth: String,
         min_id: Option<String>,
+        limit: Option<usize>,
     ) -> Self {
         Self {
             all_ids: VecDeque::new(),
             community_id,
             tab,
             min_id,
+            limit,
+            count: 0,
             auth,
             page_state: PageState::Inital,
         }
@@ -81,6 +86,13 @@ impl ArtistPosts {
         client: &'a Client,
     ) -> impl Stream<Item = Result<ArtistPostShort>> + 'a {
         futures::stream::unfold(self, |state| async {
+            if let Some(limit) = state.limit {
+                if state.count >= limit {
+                    return None;
+                }
+            }
+            state.count += 1;
+
             // Pop off and return the next post if it exists
             if let Some(post_id) = state.all_ids.pop_front() {
                 return Some((Ok(post_id), state));
@@ -200,8 +212,13 @@ mod test {
     async fn artist_posts_paging() {
         let client = Client::new();
         let auth = LOGIN_INFO.get_or_init(setup()).await;
-        let mut artist_posts =
-            ArtistPosts::init(CommunityId::new(14), Tab::ArtistPosts, auth.clone(), None);
+        let mut artist_posts = ArtistPosts::init(
+            CommunityId::new(14),
+            Tab::ArtistPosts,
+            auth.clone(),
+            None,
+            None,
+        );
         let posts_stream = artist_posts.as_stream(&client).await;
         futures::pin_mut!(posts_stream);
         let mut ids = HashSet::new();
@@ -218,7 +235,7 @@ mod test {
         let client = Client::new();
         let auth = LOGIN_INFO.get_or_init(setup()).await;
         let mut artist_posts =
-            ArtistPosts::init(CommunityId::new(14), Tab::Lives, auth.clone(), None);
+            ArtistPosts::init(CommunityId::new(14), Tab::Lives, auth.clone(), None, None);
         let posts_stream = artist_posts.as_stream(&client).await;
         futures::pin_mut!(posts_stream);
         let mut ids = HashSet::new();

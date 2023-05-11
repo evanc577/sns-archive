@@ -18,12 +18,15 @@ pub struct ArtistConfig {
     #[serde(deserialize_with = "super::deserialize_option_path")]
     #[serde(default)]
     pub artist_download_path: Option<PathBuf>,
+    pub artist_download_limit: Option<usize>,
+    pub artist_stop_id: Option<String>,
     #[serde(deserialize_with = "super::deserialize_option_path")]
     #[serde(default)]
     pub moments_download_path: Option<PathBuf>,
     #[serde(deserialize_with = "super::deserialize_option_path")]
     #[serde(default)]
     pub lives_download_path: Option<PathBuf>,
+    pub lives_download_limit: Option<usize>,
     pub lives_stop_id: Option<String>,
 }
 

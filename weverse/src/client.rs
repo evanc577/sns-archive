@@ -37,13 +37,19 @@ impl<'a> AuthenticatedWeverseClient<'a> {
         vod_info(self.reqwest_client, &self.auth, vod_id).await
     }
 
-    pub async fn artist_posts(&self, artist: &str, min_id: Option<String>) -> Result<ArtistPosts> {
+    pub async fn artist_posts(
+        &self,
+        artist: &str,
+        min_id: Option<String>,
+        limit: Option<usize>,
+    ) -> Result<ArtistPosts> {
         let community_id = self.get_community_id(artist).await?;
         Ok(ArtistPosts::init(
             community_id,
             Tab::ArtistPosts,
             self.auth.clone(),
             min_id,
+            limit,
         ))
     }
 
@@ -52,13 +58,19 @@ impl<'a> AuthenticatedWeverseClient<'a> {
         Moments::get_latest_moments(self.reqwest_client, &self.auth, community_id).await
     }
 
-    pub async fn lives(&self, artist: &str, min_id: Option<String>) -> Result<ArtistPosts> {
+    pub async fn lives(
+        &self,
+        artist: &str,
+        min_id: Option<String>,
+        limit: Option<usize>,
+    ) -> Result<ArtistPosts> {
         let community_id = self.get_community_id(artist).await?;
         Ok(ArtistPosts::init(
             community_id,
             Tab::Lives,
             self.auth.clone(),
             min_id,
+            limit,
         ))
     }
 
