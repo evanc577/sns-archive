@@ -20,19 +20,57 @@ enum PageState {
 }
 
 #[derive(Debug)]
+pub enum Tab {
+    ArtistPosts,
+    Lives,
+}
+
+#[derive(Debug)]
 pub struct ArtistPosts {
     all_ids: VecDeque<ArtistPostShort>,
     community_id: CommunityId,
     auth: String,
+    tab: Tab,
+    min_id: Option<String>,
     // For pagination
     page_state: PageState,
 }
 
+impl Tab {
+    fn url(&self, community_id: &CommunityId, after: &str) -> String {
+        let endpoint = match self {
+            Self::ArtistPosts => "artistTabPosts",
+            Self::Lives => "liveTabPosts",
+        };
+        let params = format!(
+            "fieldSet=postsV1&\
+                limit=20&\
+                pagingType=CURSOR&\
+                appId={}&\
+                language=en&\
+                platform=WEB&\
+                wpf=pc",
+            APP_ID
+        );
+        format!(
+            "/post/v1.0/community-{}/{endpoint}?{after}{params}",
+            community_id.id(),
+        )
+    }
+}
+
 impl ArtistPosts {
-    pub(crate) fn init(community_id: CommunityId, auth: String) -> Self {
+    pub(crate) fn init(
+        community_id: CommunityId,
+        tab: Tab,
+        auth: String,
+        min_id: Option<String>,
+    ) -> Self {
         Self {
             all_ids: VecDeque::new(),
             community_id,
+            tab,
+            min_id,
             auth,
             page_state: PageState::Inital,
         }
@@ -75,24 +113,16 @@ impl ArtistPosts {
             _ => unreachable!(),
         };
 
-        let url = compute_url(
-            &format!(
-                "/post/v1.0/community-{}/artistTabPosts?{}fieldSet=postsV1&limit=20&pagingType=CURSOR&appId={}&language=en&platform=WEB&wpf=pc",
-                self.community_id.id(), after, APP_ID
-                ),
-                &secret,
-                )
-            .await?;
+        let url = compute_url(&self.tab.url(&self.community_id, &after), &secret).await?;
 
-        let post_page = client
+        let response = client
             .get(url.as_str())
             .header(header::REFERER, REFERER)
             .header(header::AUTHORIZATION, &self.auth)
             .send()
             .await?
-            .error_for_status()?
-            .json::<ArtistPostsResponse>()
-            .await?;
+            .error_for_status()?;
+        let post_page = response.json::<ArtistPostsResponse>().await?;
 
         // Update page state
         self.page_state = match post_page.paging.next_params {
@@ -101,7 +131,18 @@ impl ArtistPosts {
         };
 
         // Fill artist posts
-        self.all_ids.extend(post_page.data.into_iter());
+        for p in post_page.data {
+            if self
+                .min_id
+                .as_ref()
+                .map(|id| id == &p.post_id)
+                .unwrap_or(false)
+            {
+                self.page_state = PageState::Done;
+                return Ok(());
+            }
+            self.all_ids.push_back(p);
+        }
 
         Ok(())
     }
@@ -133,27 +174,59 @@ pub struct ArtistPostShort {
     pub post_id: String,
     pub plain_body: String,
     pub author: Member,
+    pub section_type: String,
 }
 
 impl ArtistPostShort {
     pub fn slug(&self) -> Result<String> {
-        slug(&self.time, &self.post_id, &self.author, &self.plain_body)
+        let body = match self.section_type.to_lowercase().as_ref() {
+            "live" => None,
+            _ => Some(self.plain_body.as_str()),
+        };
+        slug(&self.time, &self.post_id, &self.author, body)
     }
 }
 
 #[cfg(test)]
 mod test {
+    use std::collections::HashSet;
+
     use futures::stream::StreamExt;
 
     use super::*;
     use crate::utils::{setup, LOGIN_INFO};
 
     #[tokio::test]
-    async fn paging() {
+    async fn artist_posts_paging() {
         let client = Client::new();
         let auth = LOGIN_INFO.get_or_init(setup()).await;
-        let mut artist_posts = ArtistPosts::init(CommunityId::new(14), auth.clone());
-        let post_stream = artist_posts.as_stream(&client).await;
-        assert_eq!(30, post_stream.take(30).count().await);
+        let mut artist_posts =
+            ArtistPosts::init(CommunityId::new(14), Tab::ArtistPosts, auth.clone(), None);
+        let posts_stream = artist_posts.as_stream(&client).await;
+        futures::pin_mut!(posts_stream);
+        let mut ids = HashSet::new();
+        for _ in 0..30 {
+            let post = posts_stream.next().await.unwrap().unwrap();
+            dbg!(&post.post_id);
+            assert!(!ids.contains(&post.post_id));
+            ids.insert(post.post_id);
+        }
+    }
+
+    #[tokio::test]
+    async fn lives_paging() {
+        let client = Client::new();
+        let auth = LOGIN_INFO.get_or_init(setup()).await;
+        let mut artist_posts =
+            ArtistPosts::init(CommunityId::new(14), Tab::Lives, auth.clone(), None);
+        let posts_stream = artist_posts.as_stream(&client).await;
+        futures::pin_mut!(posts_stream);
+        let mut ids = HashSet::new();
+        for _ in 0..30 {
+            let post = posts_stream.next().await.unwrap().unwrap();
+            dbg!(&post.post_id);
+            assert!(!ids.contains(&post.post_id));
+            ids.insert(post.post_id);
+        }
     }
 }

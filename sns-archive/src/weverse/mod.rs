@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
 
 use anyhow::Result;
@@ -26,7 +27,7 @@ pub async fn download(conf: WeverseConfig) -> Result<()> {
         // Download posts
         if let Some(artist_download_path) = &artist_config.artist_download_path {
             println!("Downloading {} posts", artist);
-            let mut posts = weverse_client.artist_posts(&artist).await?;
+            let mut posts = weverse_client.artist_posts(&artist, None).await?;
             let posts_stream = posts.as_stream(&client).await;
             futures::pin_mut!(posts_stream);
             fs::create_dir_all(artist_download_path).await?;
@@ -73,6 +74,34 @@ pub async fn download(conf: WeverseConfig) -> Result<()> {
                     errored = true;
                 });
         }
+
+        // Download lives
+        if let Some(lives_download_path) = &artist_config.lives_download_path {
+            println!("Downloading {} lives", artist);
+            let mut posts = weverse_client
+                .lives(&artist, artist_config.lives_stop_id)
+                .await?;
+            let posts_stream = posts.as_stream(&client).await;
+            futures::pin_mut!(posts_stream);
+            fs::create_dir_all(lives_download_path).await?;
+            posts_stream
+                .map(|p| download_live(lives_download_path, &client, &weverse_client, p))
+                .buffered(conf.max_connections)
+                .take_while(|r| {
+                    let ret = match r {
+                        Ok(DownloadStatus::Skipped) => false,
+                        Ok(DownloadStatus::Downloaded) => true,
+                        Err(e) => {
+                            println!("Error: {:?}", e);
+                            errored = true;
+                            true
+                        }
+                    };
+                    future::ready(ret)
+                })
+                .collect::<Vec<_>>()
+                .await;
+        }
     }
 
     if errored {
@@ -99,6 +128,43 @@ enum DownloadStatus {
     Skipped,
 }
 
+async fn download_live(
+    download_dir: impl AsRef<Path>,
+    client: &Client,
+    weverse_client: &AuthenticatedWeverseClient<'_>,
+    post: Result<ArtistPostShort>,
+) -> Result<DownloadStatus> {
+    let post = post?;
+    let slug = post.slug()?;
+    let mut read_dir = fs::read_dir(download_dir.as_ref()).await?;
+    while let Some(f) = read_dir.next_entry().await? {
+        if f.file_name().as_bytes().starts_with(slug.as_bytes()) {
+            return Ok(DownloadStatus::Skipped);
+        }
+    }
+
+    // Create temporary directory
+    let temp_dir = download_dir
+        .as_ref()
+        .join(format!(".{}.temp", post.slug()?));
+    fs::create_dir_all(&temp_dir).await?;
+
+    // Download to temporary directory
+    let post = weverse_client.vod_info(&post.post_id).await?;
+    post.download(client, &temp_dir).await?;
+
+    // Move files out of temporary directory
+    let mut read_dir = fs::read_dir(&temp_dir).await?;
+    while let Some(f) = read_dir.next_entry().await? {
+        fs::rename(f.path(), &download_dir.as_ref().join(f.file_name())).await?;
+    }
+    fs::remove_dir(temp_dir).await?;
+
+    println!("Downloaded {}", slug);
+
+    Ok(DownloadStatus::Downloaded)
+}
+
 async fn download_post(
     download_dir: impl AsRef<Path>,
     client: &Client,
@@ -110,8 +176,8 @@ async fn download_post(
     if download_dir.as_ref().join(&slug).exists() {
         return Ok(DownloadStatus::Skipped);
     }
-    let post = weverse_client.post(&post.post_id).await?;
 
+    let post = weverse_client.post(&post.post_id).await?;
     download_post_real(download_dir.as_ref(), client, &post).await?;
     Ok(DownloadStatus::Downloaded)
 }

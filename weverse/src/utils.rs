@@ -21,17 +21,23 @@ pub(crate) fn slug(
     time: &OffsetDateTime,
     post_id: &str,
     author: &Member,
-    body: &str,
+    body: Option<&str>,
 ) -> Result<String> {
     let time_str = {
         let format = format_description::parse("[year][month][day]")?;
         time.format(&format)?
     };
-    let username = &author.official_profile.official_name;
-    let body: String = UnicodeSegmentation::graphemes(body, true)
-        .take(50)
-        .collect();
-    let slug = format!("{}-{}-{}-{}", time_str, post_id, username, body);
+    let username = if let Some(p) = &author.official_profile {
+        &p.official_name
+    } else {
+        &author.profile_name
+    };
+    let slug = if let Some(b) = body {
+        let body: String = UnicodeSegmentation::graphemes(b, true).take(50).collect();
+        format!("{}-{}-{}-{}", time_str, post_id, username, body)
+    } else {
+        format!("{}-{}-{}", time_str, post_id, username)
+    };
     let sanitize_options = sanitize_filename::Options {
         windows: true,
         ..Default::default()

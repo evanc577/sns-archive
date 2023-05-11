@@ -11,7 +11,7 @@ pub struct Member {
     pub profile_name: String,
     pub profile_type: String,
     #[serde(rename = "artistOfficialProfile")]
-    pub official_profile: OfficialProfile,
+    pub official_profile: Option<OfficialProfile>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]

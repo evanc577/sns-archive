@@ -1,12 +1,21 @@
+use std::path::{Path, PathBuf};
+
 use anyhow::Result;
+use async_trait::async_trait;
+use futures::StreamExt;
 use reqwest::{header, Client, Url};
 use serde::Deserialize;
+use sns_archive_common::{set_mtime, SavablePost};
 use time::OffsetDateTime;
+use tokio::fs;
+use tokio::io::AsyncWriteExt;
 
+use super::member::Member;
 use super::REFERER;
 use crate::auth::{compute_url, get_secret};
 use crate::endpoint::APP_ID;
-use crate::utils::deserialize_timestamp;
+use crate::error::WeverseError;
+use crate::utils::{deserialize_timestamp, slug};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -150,7 +159,7 @@ pub struct VodInfo {
     pub id: String,
     pub url: Url,
     pub time: OffsetDateTime,
-    pub author: String,
+    pub author: Member,
     pub videos: Vec<Video>,
 }
 
@@ -164,14 +173,8 @@ struct VodInfoResponse {
     #[serde(rename = "publishedAt")]
     #[serde(deserialize_with = "deserialize_timestamp")]
     time: OffsetDateTime,
-    author: Author,
+    author: Member,
     extension: Extension,
-}
-
-#[derive(Deserialize, Debug)]
-struct Author {
-    #[serde(rename = "profileName")]
-    name: String,
 }
 
 #[derive(Deserialize, Debug)]
@@ -223,11 +226,57 @@ pub(crate) async fn vod_info(client: &Client, auth: &str, vod_id: &str) -> Resul
         id: resp.post_id,
         url: Url::parse(&resp.url)?,
         time: resp.time,
-        author: resp.author.name,
+        author: resp.author,
         videos,
     };
 
     Ok(info)
+}
+
+impl VodInfo {
+    fn gen_file_name(&self) -> Result<PathBuf> {
+        let slug = self.slug()?;
+
+        // Format extension
+        let ext = self
+            .url
+            .path()
+            .rsplit_once('.')
+            .map(|(_, ext)| ext)
+            .unwrap_or("mp4");
+
+        Ok(PathBuf::from(format!("{slug}.{ext}")))
+    }
+}
+
+#[async_trait]
+impl SavablePost for VodInfo {
+    async fn download(&self, client: &Client, directory: impl AsRef<Path> + Send) -> Result<()> {
+        let output = directory.as_ref().join(self.gen_file_name()?);
+        let mut file = fs::File::create(&output).await?;
+
+        // Select best quality
+        let video = self
+            .videos
+            .iter()
+            .max()
+            .ok_or(WeverseError::Download(self.id.clone()))?;
+        let resp = client.get(&video.source).send().await?;
+
+        // Download file
+        let mut stream = resp.bytes_stream();
+        while let Some(b) = stream.next().await {
+            let chunk = b?;
+            file.write_all(&chunk).await?;
+        }
+        set_mtime(&output, &self.time)?;
+
+        Ok(())
+    }
+
+    fn slug(&self) -> Result<String> {
+        slug(&self.time, &self.id, &self.author, Some(&self.title))
+    }
 }
 
 #[cfg(test)]

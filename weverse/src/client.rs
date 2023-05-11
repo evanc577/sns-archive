@@ -5,7 +5,7 @@ use anyhow::Result;
 use reqwest::Client;
 
 use crate::auth::{login, LoginInfo};
-use crate::endpoint::artist_tab_posts::ArtistPosts;
+use crate::endpoint::artist_tab_posts::{ArtistPosts, Tab};
 use crate::endpoint::community_id::{community_id, CommunityId};
 use crate::endpoint::moments::Moments;
 use crate::endpoint::post::{post, ArtistPost};
@@ -37,14 +37,29 @@ impl<'a> AuthenticatedWeverseClient<'a> {
         vod_info(self.reqwest_client, &self.auth, vod_id).await
     }
 
-    pub async fn artist_posts(&self, artist: &str) -> Result<ArtistPosts> {
+    pub async fn artist_posts(&self, artist: &str, min_id: Option<String>) -> Result<ArtistPosts> {
         let community_id = self.get_community_id(artist).await?;
-        Ok(ArtistPosts::init(community_id, self.auth.clone()))
+        Ok(ArtistPosts::init(
+            community_id,
+            Tab::ArtistPosts,
+            self.auth.clone(),
+            min_id,
+        ))
     }
 
     pub async fn artist_moments(&self, artist: &str) -> Result<Vec<ArtistPost>> {
         let community_id = self.get_community_id(artist).await?;
         Moments::get_latest_moments(self.reqwest_client, &self.auth, community_id).await
+    }
+
+    pub async fn lives(&self, artist: &str, min_id: Option<String>) -> Result<ArtistPosts> {
+        let community_id = self.get_community_id(artist).await?;
+        Ok(ArtistPosts::init(
+            community_id,
+            Tab::Lives,
+            self.auth.clone(),
+            min_id,
+        ))
     }
 
     pub async fn post(&self, post_id: &str) -> Result<ArtistPost> {

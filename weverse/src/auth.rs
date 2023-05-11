@@ -50,10 +50,16 @@ pub(crate) async fn get_secret(client: &Client) -> Result<Vec<u8>> {
 
 pub(crate) async fn compute_url(base_url: &str, secret: &[u8]) -> Result<Url> {
     let pad = OffsetDateTime::now_utc().unix_timestamp_nanos() / 1_000_000;
-    let url_hash = format!("{}{}", base_url, &pad.to_string());
+    let data_to_hash: Vec<_> = base_url
+        .as_bytes()
+        .iter()
+        .take(255)
+        .chain(pad.to_string().as_bytes().iter())
+        .copied()
+        .collect();
 
     let mut mac = Hmac::<Sha1>::new_from_slice(secret)?;
-    mac.update(url_hash.as_bytes());
+    mac.update(&data_to_hash);
     let digest = base64::encode(mac.finalize().into_bytes());
 
     static DOMAIN: &str = "https://global.apis.naver.com/weverse/wevweb";

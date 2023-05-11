@@ -21,6 +21,10 @@ pub struct ArtistConfig {
     #[serde(deserialize_with = "super::deserialize_option_path")]
     #[serde(default)]
     pub moments_download_path: Option<PathBuf>,
+    #[serde(deserialize_with = "super::deserialize_option_path")]
+    #[serde(default)]
+    pub lives_download_path: Option<PathBuf>,
+    pub lives_stop_id: Option<String>,
 }
 
 fn default_num_processes() -> usize {

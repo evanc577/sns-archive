@@ -33,7 +33,7 @@ pub struct ArtistPost {
     #[serde(serialize_with = "rfc3339::serialize")]
     time: OffsetDateTime,
     post_type: PostType,
-    section_type: String,
+    pub section_type: String,
     #[serde(rename = "postId")]
     id: String,
     body: String,
@@ -52,7 +52,6 @@ where
     for<'a> T: Deserialize<'a>,
 {
     #[derive(Deserialize, Debug)]
-    #[serde(deny_unknown_fields)]
     struct Empty {}
 
     #[derive(Deserialize, Debug)]
@@ -201,17 +200,30 @@ lazy_static! {
 #[async_trait]
 impl SavablePost for ArtistPost {
     async fn download(&self, client: &Client, directory: impl AsRef<Path> + Send) -> Result<()> {
-        let (info_res, photos_res, videos_res) = futures::join!(
-            self.write_info(directory.as_ref()),
-            self.download_all_photos(client, directory.as_ref()),
-            self.download_all_videos(client, &self.auth, directory.as_ref()),
-        );
+        match self.section_type.to_lowercase().as_str() {
+            "live" => {
+                let dir = directory.as_ref();
+                let res = self
+                    .download_all_videos(client, &self.auth, dir, true)
+                    .await;
+                if res.iter().any(|r| r.is_err()) {
+                    return Err(WeverseError::Download(self.id.clone()).into());
+                }
+            }
+            _ => {
+                let (info_res, photos_res, videos_res) = futures::join!(
+                    self.write_info(directory.as_ref()),
+                    self.download_all_photos(client, directory.as_ref()),
+                    self.download_all_videos(client, &self.auth, directory.as_ref(), false),
+                );
 
-        if info_res.is_err()
-            || photos_res.iter().any(|r| r.is_err())
-            || videos_res.iter().any(|r| r.is_err())
-        {
-            return Err(WeverseError::Download(self.id.clone()).into());
+                if info_res.is_err()
+                    || photos_res.iter().any(|r| r.is_err())
+                    || videos_res.iter().any(|r| r.is_err())
+                {
+                    return Err(WeverseError::Download(self.id.clone()).into());
+                }
+            }
         }
 
         // Set mtime on directory and all files in it
@@ -224,7 +236,7 @@ impl SavablePost for ArtistPost {
     }
 
     fn slug(&self) -> Result<String> {
-        slug(&self.time, &self.id, &self.author, &self.plain_body)
+        slug(&self.time, &self.id, &self.author, Some(&self.plain_body))
     }
 }
 
@@ -277,6 +289,7 @@ impl ArtistPost {
         client: &Client,
         auth: &str,
         directory: impl AsRef<Path>,
+        is_live: bool,
     ) -> Vec<Result<()>> {
         // Download both regular and moments videos
         let videos = self.videos().chain(
@@ -290,7 +303,7 @@ impl ArtistPost {
         );
         futures::stream::iter(videos)
             .enumerate()
-            .map(|(i, v)| self.download_video(client, auth, v, i, directory.as_ref()))
+            .map(|(i, v)| self.download_video(client, auth, v, i, directory.as_ref(), is_live))
             .buffered(usize::MAX)
             .collect()
             .await
@@ -321,6 +334,7 @@ impl ArtistPost {
         video: Video,
         idx: usize,
         directory: impl AsRef<Path>,
+        is_live: bool,
     ) -> Result<()> {
         let video_ids = VideoIds::NoExtension(CVideo {
             post_id: video.id,
@@ -335,7 +349,11 @@ impl ArtistPost {
             .rsplit_once('.')
             .map(|(_, ext)| ext)
             .unwrap_or("mp4");
-        let filename = format!("{}-vid{:02}.{}", self.slug()?, idx + 1, ext);
+        let filename = if is_live {
+            format!("{}.{}", self.slug()?, ext)
+        } else {
+            format!("{}-vid{:02}.{}", self.slug()?, idx + 1, ext)
+        };
         let path = directory.as_ref().join(filename);
         streamed_download(client, video_url, path).await
     }
