@@ -2,7 +2,7 @@
 members = ["common", "weibo", "weverse", "sns-archive"]
 
 [workspace.package]
-version = "0.2.1"
+version = "0.2.2"
 authors = ["Evan Chang"]
 description = "Unified social media archiver"
 license = "GPL-3.0-only"
