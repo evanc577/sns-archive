@@ -162,7 +162,7 @@ async fn download_live(
     fs::create_dir_all(&temp_dir).await?;
 
     // Download to temporary directory
-    let post = weverse_client.vod_info(&post.post_id).await?;
+    let post = weverse_client.post(&post.post_id).await?;
     post.download(client, &temp_dir).await?;
 
     // Move files out of temporary directory

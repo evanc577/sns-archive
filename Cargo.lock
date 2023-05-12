@@ -2497,23 +2497,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "weverse-vod-downloader"
-version = "0.2.1"
-dependencies = [
- "anyhow",
- "clap",
- "futures",
- "indicatif",
- "lazy_static",
- "regex",
- "reqwest",
- "time 0.3.15",
- "tokio",
- "unicode-segmentation",
- "weverse",
-]
-
-[[package]]
 name = "winapi"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"

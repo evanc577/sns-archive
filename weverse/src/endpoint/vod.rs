@@ -1,21 +1,10 @@
-use std::path::{Path, PathBuf};
-
 use anyhow::Result;
-use async_trait::async_trait;
-use futures::StreamExt;
-use reqwest::{header, Client, Url};
-use serde::Deserialize;
-use sns_archive_common::{set_mtime, SavablePost};
-use time::OffsetDateTime;
-use tokio::fs;
-use tokio::io::AsyncWriteExt;
+use reqwest::{header, Client};
+use serde::{Deserialize, Serialize};
 
-use super::member::Member;
 use super::REFERER;
-use crate::auth::{compute_url, get_secret};
+use crate::auth::compute_url;
 use crate::endpoint::APP_ID;
-use crate::error::WeverseError;
-use crate::utils::{deserialize_timestamp, slug};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -79,12 +68,27 @@ impl Ord for Encoding {
     }
 }
 
-pub enum VideoIds {
-    Extension(ExtensionVideo),
+pub(crate) enum VideoType {
+    Extension(LiveVideo),
     NoExtension(CVideo),
 }
 
-impl VideoIds {
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LiveVideo {
+    #[serde(rename = "infraVideoId")]
+    infra_id: String,
+    #[serde(rename = "videoId")]
+    video_id: u64,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct MediaInfo {
+    pub title: String,
+}
+
+impl VideoType {
     fn infra_id(&self) -> &str {
         match self {
             Self::Extension(e) => e.infra_id.as_str(),
@@ -101,16 +105,16 @@ pub struct CVideo {
 pub(crate) async fn vod_videos(
     client: &Client,
     auth: &str,
-    video_ids: &VideoIds,
+    video_ids: &VideoType,
     secret: &[u8],
 ) -> Result<Vec<Video>> {
     // Acquire inKey
     let base_url = match video_ids {
-        VideoIds::Extension(e) => format!(
+        VideoType::Extension(e) => format!(
             "/video/v1.0/vod/{}/inKey?preview=false&appId={}&wpf=pc",
             e.video_id, APP_ID
         ),
-        VideoIds::NoExtension(id) => format!(
+        VideoType::NoExtension(id) => format!(
             "/cvideo/v1.0/cvideo-{}/inKey/?videoId={}&appId={}&language=en&platform=WEB&wpf=pc",
             id.post_id, id.post_id, APP_ID
         ),
@@ -118,8 +122,8 @@ pub(crate) async fn vod_videos(
     let inkey_url = compute_url(&base_url, secret).await?;
 
     let req = match video_ids {
-        VideoIds::Extension(_) => client.post(inkey_url.as_str()),
-        VideoIds::NoExtension(_) => client.get(inkey_url.as_str()),
+        VideoType::Extension(_) => client.post(inkey_url.as_str()),
+        VideoType::NoExtension(_) => client.get(inkey_url.as_str()),
     };
 
     let in_key = req
@@ -150,153 +154,4 @@ pub(crate) async fn vod_videos(
     videos.sort();
 
     Ok(videos)
-}
-
-/// General VOD info
-#[derive(Debug, Clone)]
-pub struct VodInfo {
-    pub title: String,
-    pub id: String,
-    pub url: Url,
-    pub time: OffsetDateTime,
-    pub author: Member,
-    pub videos: Vec<Video>,
-}
-
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-struct VodInfoResponse {
-    title: String,
-    post_id: String,
-    #[serde(rename = "shareUrl")]
-    url: String,
-    #[serde(rename = "publishedAt")]
-    #[serde(deserialize_with = "deserialize_timestamp")]
-    time: OffsetDateTime,
-    author: Member,
-    extension: Extension,
-}
-
-#[derive(Deserialize, Debug)]
-struct Extension {
-    video: ExtensionVideo,
-}
-
-#[derive(Deserialize, Debug)]
-pub struct ExtensionVideo {
-    #[serde(rename = "infraVideoId")]
-    infra_id: String,
-    #[serde(rename = "videoId")]
-    video_id: u64,
-}
-
-pub(crate) async fn vod_info(client: &Client, auth: &str, vod_id: &str) -> Result<VodInfo> {
-    let secret = get_secret(client).await?;
-
-    // Get VOD info
-    let url = compute_url(
-        &format!(
-            "/post/v1.0/post-{}?fieldSet=postV1&appId={}&language=en&platform=WEB&wpf=pc",
-            vod_id, APP_ID
-        ),
-        &secret,
-    )
-    .await?;
-    let resp = client
-        .get(url.as_str())
-        .header(header::REFERER, REFERER)
-        .header(header::AUTHORIZATION, auth)
-        .send()
-        .await?
-        .error_for_status()?
-        .json::<VodInfoResponse>()
-        .await?;
-
-    // Get videos
-    let videos = vod_videos(
-        client,
-        auth,
-        &VideoIds::Extension(resp.extension.video),
-        &secret,
-    )
-    .await?;
-
-    let info = VodInfo {
-        title: resp.title,
-        id: resp.post_id,
-        url: Url::parse(&resp.url)?,
-        time: resp.time,
-        author: resp.author,
-        videos,
-    };
-
-    Ok(info)
-}
-
-impl VodInfo {
-    fn gen_file_name(&self) -> Result<PathBuf> {
-        let slug = self.slug()?;
-
-        // Format extension
-        let ext = self
-            .url
-            .path()
-            .rsplit_once('.')
-            .map(|(_, ext)| ext)
-            .unwrap_or("mp4");
-
-        Ok(PathBuf::from(format!("{slug}.{ext}")))
-    }
-}
-
-#[async_trait]
-impl SavablePost for VodInfo {
-    async fn download(&self, client: &Client, directory: impl AsRef<Path> + Send) -> Result<()> {
-        let output = directory.as_ref().join(self.gen_file_name()?);
-        let mut file = fs::File::create(&output).await?;
-
-        // Select best quality
-        let video = self
-            .videos
-            .iter()
-            .max()
-            .ok_or(WeverseError::Download(self.id.clone()))?;
-        let resp = client.get(&video.source).send().await?;
-
-        // Download file
-        let mut stream = resp.bytes_stream();
-        while let Some(b) = stream.next().await {
-            let chunk = b?;
-            file.write_all(&chunk).await?;
-        }
-        set_mtime(&output, &self.time)?;
-
-        Ok(())
-    }
-
-    fn slug(&self) -> Result<String> {
-        slug(&self.time, &self.id, &self.author, Some(&self.title))
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    use crate::utils::{setup, LOGIN_INFO};
-
-    #[tokio::test]
-    async fn get_vod_info() {
-        let client = Client::new();
-        let auth = LOGIN_INFO.get_or_init(setup()).await;
-        let vod_info = vod_info(&client, auth, "2-106178776").await.unwrap();
-        dbg!(vod_info);
-    }
-
-    #[tokio::test]
-    async fn get_vod_info_vlive() {
-        let client = Client::new();
-        let auth = LOGIN_INFO.get_or_init(setup()).await;
-        let vod_info = vod_info(&client, auth, "1-105466775").await.unwrap();
-        dbg!(vod_info);
-    }
 }

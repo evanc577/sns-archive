@@ -9,7 +9,6 @@ use crate::endpoint::artist_tab_posts::{ArtistPosts, Tab};
 use crate::endpoint::community_id::{community_id, CommunityId};
 use crate::endpoint::moments::Moments;
 use crate::endpoint::post::{post, ArtistPost};
-use crate::endpoint::vod::{vod_info, VodInfo};
 
 #[derive(Clone, Debug)]
 pub struct AuthenticatedWeverseClient<'a> {
@@ -30,11 +29,6 @@ impl<'a> AuthenticatedWeverseClient<'a> {
             auth,
             community_id_map: Arc::new(Mutex::new(HashMap::new())),
         })
-    }
-
-    /// Fetch information about a Weverse VOD, including metadata and videos
-    pub async fn vod_info(&self, vod_id: &str) -> Result<VodInfo> {
-        vod_info(self.reqwest_client, &self.auth, vod_id).await
     }
 
     pub async fn artist_posts(

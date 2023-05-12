@@ -16,7 +16,7 @@ use tokio::io::AsyncWriteExt;
 
 use super::community_id::CommunityId;
 use super::member::Member;
-use super::vod::{vod_videos, CVideo, VideoIds};
+use super::vod::{vod_videos, CVideo, LiveVideo, MediaInfo, VideoType};
 use super::{APP_ID, REFERER};
 use crate::auth::{compute_url, get_secret};
 use crate::error::WeverseError;
@@ -32,7 +32,7 @@ pub struct ArtistPost {
     #[serde(deserialize_with = "deserialize_timestamp")]
     #[serde(serialize_with = "rfc3339::serialize")]
     time: OffsetDateTime,
-    pub section_type: String,
+    section_type: SectionType,
     #[serde(rename = "postId")]
     id: String,
     body: String,
@@ -42,6 +42,14 @@ pub struct ArtistPost {
     author_moment_posts: Option<AuthorMomentPosts>,
     #[serde(skip)]
     auth: String,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+enum SectionType {
+    Artist,
+    Moment,
+    Live,
 }
 
 /// Maps id to photo/video
@@ -107,14 +115,14 @@ impl Moment {
     fn photo_url(&self) -> Option<&str> {
         match self {
             Self::Photo { photo } => Some(&photo.url),
-            Self::BgImage { url } => Some(&url),
+            Self::BgImage { url } => Some(url),
             _ => None,
         }
     }
 
     fn video(&self) -> Option<&Video> {
         match self {
-            Self::Video { video } => Some(&video),
+            Self::Video { video } => Some(video),
             _ => None,
         }
     }
@@ -125,21 +133,6 @@ impl Moment {
 struct ExtensionVideo {
     video: LiveVideo,
     media_info: MediaInfo,
-}
-
-#[derive(Deserialize, Serialize, Clone, Debug)]
-#[serde(rename_all = "camelCase")]
-struct LiveVideo {
-    #[serde(rename = "infraVideoId")]
-    infra_id: String,
-    #[serde(rename = "videoId")]
-    video_id: u64,
-}
-
-#[derive(Deserialize, Serialize, Clone, Debug)]
-#[serde(rename_all = "camelCase")]
-struct MediaInfo {
-    title: String,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -239,21 +232,16 @@ lazy_static! {
 #[async_trait]
 impl SavablePost for ArtistPost {
     async fn download(&self, client: &Client, directory: impl AsRef<Path> + Send) -> Result<()> {
-        match self.section_type.to_lowercase().as_str() {
-            "live" => {
+        match self.section_type {
+            SectionType::Live => {
                 let dir = directory.as_ref();
-                let res = self
-                    .download_all_videos(client, &self.auth, dir, true)
-                    .await;
-                if res.iter().any(|r| r.is_err()) {
-                    return Err(WeverseError::Download(self.id.clone()).into());
-                }
+                self.download_live(client, &self.auth, dir).await?;
             }
             _ => {
                 let (info_res, photos_res, videos_res) = futures::join!(
                     self.write_info(directory.as_ref()),
                     self.download_all_photos(client, directory.as_ref()),
-                    self.download_all_videos(client, &self.auth, directory.as_ref(), false),
+                    self.download_all_videos(client, &self.auth, directory.as_ref()),
                 );
 
                 if info_res.is_err()
@@ -305,13 +293,34 @@ impl ArtistPost {
         Ok(())
     }
 
+    async fn download_live(&self, client: &Client, auth: &str, directory: impl AsRef<Path>) -> Result<()> {
+        let video_type = match self.extension {
+            Extension::Video(ref video) => {
+                VideoType::Extension(video.video.clone())
+            }
+            _ => unreachable!(),
+        };
+        let secret = get_secret(client).await.unwrap();
+        let vod_info = vod_videos(client, auth, &video_type, &secret).await.unwrap();
+        let video_url = &vod_info.iter().max().unwrap().source;
+        let url = Url::parse(video_url)?;
+        let ext = url
+            .path()
+            .rsplit_once('.')
+            .map(|(_, ext)| ext)
+            .unwrap_or("mp4");
+        let filename = format!("{}.{}", self.slug()?, ext);
+        let path = directory.as_ref().join(filename);
+        streamed_download(client, video_url, path).await
+    }
+
     async fn download_all_photos(
         &self,
         client: &Client,
         directory: impl AsRef<Path>,
     ) -> Vec<Result<()>> {
         // Download both regular and moments photos
-        let photos = self.photos().map(|p| p.url.clone()).chain(
+        let photos = self.photos().map(|p| p.url).chain(
             self.extension
                 .moment()
                 .and_then(|m| m.photo_url().map(|u| u.to_owned()))
@@ -330,7 +339,6 @@ impl ArtistPost {
         client: &Client,
         auth: &str,
         directory: impl AsRef<Path>,
-        is_live: bool,
     ) -> Vec<Result<()>> {
         // Download both regular and moments videos
         let videos = self.videos().chain(
@@ -341,7 +349,7 @@ impl ArtistPost {
         );
         futures::stream::iter(videos)
             .enumerate()
-            .map(|(i, v)| self.download_video(client, auth, v, i, directory.as_ref(), is_live))
+            .map(|(i, v)| self.download_video(client, auth, v, i, directory.as_ref()))
             .buffered(usize::MAX)
             .collect()
             .await
@@ -372,14 +380,13 @@ impl ArtistPost {
         video: Video,
         idx: usize,
         directory: impl AsRef<Path>,
-        is_live: bool,
     ) -> Result<()> {
-        let video_ids = VideoIds::NoExtension(CVideo {
+        let video_type = VideoType::NoExtension(CVideo {
             post_id: video.id,
             infra_id: video.upload_info.id,
         });
         let secret = get_secret(client).await.unwrap();
-        let vod_info = vod_videos(client, auth, &video_ids, &secret).await.unwrap();
+        let vod_info = vod_videos(client, auth, &video_type, &secret).await.unwrap();
         let video_url = &vod_info.iter().max().unwrap().source;
         let url = Url::parse(video_url)?;
         let ext = url
@@ -387,11 +394,7 @@ impl ArtistPost {
             .rsplit_once('.')
             .map(|(_, ext)| ext)
             .unwrap_or("mp4");
-        let filename = if is_live {
-            format!("{}.{}", self.slug()?, ext)
-        } else {
-            format!("{}-vid{:02}.{}", self.slug()?, idx + 1, ext)
-        };
+        let filename = format!("{}-vid{:02}.{}", self.slug()?, idx + 1, ext);
         let path = directory.as_ref().join(filename);
         streamed_download(client, video_url, path).await
     }
@@ -427,7 +430,10 @@ mod test {
         let client = Client::new();
         let auth = LOGIN_INFO.get_or_init(setup()).await;
         let post = post(&client, auth, "1-106028137").await.unwrap();
-        assert_eq!(post.slug().unwrap(), "20220927-1-106028137-DAMI-이런걸 왜 찍었던 거지🤔");
+        assert_eq!(
+            post.slug().unwrap(),
+            "20220927-1-106028137-DAMI-이런걸 왜 찍었던 거지🤔"
+        );
         assert_eq!(1, post.attachment.video.unwrap().len());
     }
 
@@ -436,7 +442,10 @@ mod test {
         let client = Client::new();
         let auth = LOGIN_INFO.get_or_init(setup()).await;
         let post = post(&client, auth, "1-106622307").await.unwrap();
-        assert_eq!(post.slug().unwrap(), "20221010-1-106622307-HANDONG-내일이다!!오또캐~~~🫶🫶🫶🫶");
+        assert_eq!(
+            post.slug().unwrap(),
+            "20221010-1-106622307-HANDONG-내일이다!!오또캐~~~🫶🫶🫶🫶"
+        );
         assert_eq!(2, post.attachment.photo.unwrap().len());
     }
 
@@ -453,7 +462,10 @@ mod test {
         let client = Client::new();
         let auth = LOGIN_INFO.get_or_init(setup()).await;
         let post = post(&client, auth, "4-111010672").await.unwrap();
-        assert_eq!(post.slug().unwrap(), "20230111-4-111010672-GAHYEON-우리색 하늘");
+        assert_eq!(
+            post.slug().unwrap(),
+            "20230111-4-111010672-GAHYEON-우리색 하늘"
+        );
         assert!(!post.author_moment_posts.unwrap().data.is_empty());
         assert!(matches!(post.extension, Extension::Moment(_)));
         assert!(post.extension.moment().unwrap().video().is_some());
@@ -475,7 +487,10 @@ mod test {
         let client = Client::new();
         let auth = LOGIN_INFO.get_or_init(setup()).await;
         let post = post(&client, auth, "1-14373893").await.unwrap();
-        assert_eq!(post.slug().unwrap(), "20220512-1-14373893-JI U-내 사랑❤️오늘도 수고해또❤️잘자❤️");
+        assert_eq!(
+            post.slug().unwrap(),
+            "20220512-1-14373893-JI U-내 사랑❤️오늘도 수고해또❤️잘자❤️"
+        );
         assert!(!post.author_moment_posts.unwrap().data.is_empty());
         assert!(matches!(post.extension, Extension::MomentW1(_)));
         assert!(post.extension.moment().unwrap().photo_url().is_some());

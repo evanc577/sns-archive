@@ -1,5 +1,5 @@
 [workspace]
-members = ["common", "weibo", "weverse", "weverse/vod-downloader", "sns-archive"]
+members = ["common", "weibo", "weverse", "sns-archive"]
 
 [workspace.package]
 version = "0.2.1"
