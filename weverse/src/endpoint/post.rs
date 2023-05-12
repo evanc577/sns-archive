@@ -7,7 +7,7 @@ use futures::StreamExt;
 use lazy_static::lazy_static;
 use regex::Regex;
 use reqwest::{header, Client, Url};
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use sns_archive_common::{set_mtime, streamed_download, SavablePost};
 use time::serde::rfc3339;
 use time::OffsetDateTime;
@@ -26,13 +26,12 @@ use crate::utils::{deserialize_timestamp, slug};
 #[serde(rename_all = "camelCase")]
 pub struct ArtistPost {
     attachment: PostAttachment,
-    #[serde(deserialize_with = "object_empty_as_none")]
-    extension: Option<MomentMedia>,
+    #[serde(flatten)]
+    extension: Extension,
     #[serde(rename = "publishedAt")]
     #[serde(deserialize_with = "deserialize_timestamp")]
     #[serde(serialize_with = "rfc3339::serialize")]
     time: OffsetDateTime,
-    post_type: PostType,
     pub section_type: String,
     #[serde(rename = "postId")]
     id: String,
@@ -45,29 +44,6 @@ pub struct ArtistPost {
     auth: String,
 }
 
-/// Weverse sometimes returns "extension": {}, treat as None
-fn object_empty_as_none<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
-where
-    D: Deserializer<'de>,
-    for<'a> T: Deserialize<'a>,
-{
-    #[derive(Deserialize, Debug)]
-    struct Empty {}
-
-    #[derive(Deserialize, Debug)]
-    #[serde(untagged)]
-    enum Aux<T> {
-        T(T),
-        Empty(Empty),
-        Null,
-    }
-
-    match Aux::deserialize(deserializer)? {
-        Aux::T(t) => Ok(Some(t)),
-        Aux::Empty(_) | Aux::Null => Ok(None),
-    }
-}
-
 /// Maps id to photo/video
 #[derive(Deserialize, Serialize, Clone, Debug)]
 struct PostAttachment {
@@ -75,32 +51,95 @@ struct PostAttachment {
     video: Option<HashMap<String, Video>>,
 }
 
-/// Moments contain either 1 photo or 1 video
 #[derive(Deserialize, Serialize, Clone, Debug)]
-enum MomentMedia {
-    #[serde(rename = "momentW1")]
-    Photo(W1Moment),
-    #[serde(rename = "moment")]
-    Video { video: Video },
-    #[serde(other)]
-    Empty,
+#[serde(tag = "postType", content = "extension")]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+enum Extension {
+    Normal(ExtensionNormal),
+    Moment(ExtensionMoment),
+    MomentW1(ExtensionMomentW1),
+    Video(ExtensionVideo),
 }
 
-/// Legacy moment photo, BgImage is used for Weverse-default backgrounds
-#[derive(Deserialize, Serialize, Clone, Debug)]
-#[serde(untagged)]
-enum W1Moment {
-    Photo { photo: Photo },
-    BgImage(Photo),
-}
-
-impl W1Moment {
-    fn photo(&self) -> &Photo {
+impl Extension {
+    fn moment(&self) -> Option<&Moment> {
         match self {
-            Self::Photo { photo: p } => p,
-            Self::BgImage(p) => p,
+            Self::Moment(m) => Some(&m.moment),
+            Self::MomentW1(m) => Some(&m.moment_w1),
+            _ => None,
         }
     }
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+struct ExtensionNormal {}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+struct ExtensionMoment {
+    moment: Moment,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+struct ExtensionMomentW1 {
+    moment_w1: Moment,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+#[serde(untagged)]
+enum Moment {
+    BgImage {
+        #[serde(rename = "backgroundImageUrl")]
+        url: String,
+    },
+    Photo {
+        photo: Photo,
+    },
+    Video {
+        video: Video,
+    },
+}
+
+impl Moment {
+    fn photo_url(&self) -> Option<&str> {
+        match self {
+            Self::Photo { photo } => Some(&photo.url),
+            Self::BgImage { url } => Some(&url),
+            _ => None,
+        }
+    }
+
+    fn video(&self) -> Option<&Video> {
+        match self {
+            Self::Video { video } => Some(&video),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+struct ExtensionVideo {
+    video: LiveVideo,
+    media_info: MediaInfo,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+struct LiveVideo {
+    #[serde(rename = "infraVideoId")]
+    infra_id: String,
+    #[serde(rename = "videoId")]
+    video_id: u64,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+struct MediaInfo {
+    title: String,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -236,7 +275,12 @@ impl SavablePost for ArtistPost {
     }
 
     fn slug(&self) -> Result<String> {
-        slug(&self.time, &self.id, &self.author, Some(&self.plain_body))
+        let text = if let Extension::Video(ExtensionVideo { media_info, .. }) = &self.extension {
+            &media_info.title
+        } else {
+            &self.plain_body
+        };
+        slug(&self.time, &self.id, &self.author, Some(text))
     }
 }
 
@@ -267,13 +311,10 @@ impl ArtistPost {
         directory: impl AsRef<Path>,
     ) -> Vec<Result<()>> {
         // Download both regular and moments photos
-        let photos = self.photos().chain(
+        let photos = self.photos().map(|p| p.url.clone()).chain(
             self.extension
-                .as_ref()
-                .and_then(|e| match e {
-                    MomentMedia::Photo(p) => Some(p.photo().clone()),
-                    _ => None,
-                })
+                .moment()
+                .and_then(|m| m.photo_url().map(|u| u.to_owned()))
                 .into_iter(),
         );
         futures::stream::iter(photos)
@@ -294,11 +335,8 @@ impl ArtistPost {
         // Download both regular and moments videos
         let videos = self.videos().chain(
             self.extension
-                .as_ref()
-                .and_then(|e| match e {
-                    MomentMedia::Video { video: v } => Some(v.clone()),
-                    _ => None,
-                })
+                .moment()
+                .and_then(|m| m.video().map(|v| v.to_owned()))
                 .into_iter(),
         );
         futures::stream::iter(videos)
@@ -312,11 +350,11 @@ impl ArtistPost {
     async fn download_photo(
         &self,
         client: &Client,
-        photo: Photo,
+        photo_url: impl AsRef<str>,
         idx: usize,
         directory: impl AsRef<Path>,
     ) -> Result<()> {
-        let url = Url::parse(&photo.url)?;
+        let url = Url::parse(photo_url.as_ref())?;
         let ext = url
             .path()
             .rsplit_once('.')
@@ -324,7 +362,7 @@ impl ArtistPost {
             .unwrap_or("jpg");
         let filename = format!("{}-img{:02}.{}", self.slug()?, idx + 1, ext);
         let path = directory.as_ref().join(filename);
-        streamed_download(client, photo.url, path).await
+        streamed_download(client, photo_url.as_ref(), path).await
     }
 
     async fn download_video(
@@ -389,6 +427,7 @@ mod test {
         let client = Client::new();
         let auth = LOGIN_INFO.get_or_init(setup()).await;
         let post = post(&client, auth, "1-106028137").await.unwrap();
+        assert_eq!(post.slug().unwrap(), "20220927-1-106028137-DAMI-이런걸 왜 찍었던 거지🤔");
         assert_eq!(1, post.attachment.video.unwrap().len());
     }
 
@@ -397,6 +436,7 @@ mod test {
         let client = Client::new();
         let auth = LOGIN_INFO.get_or_init(setup()).await;
         let post = post(&client, auth, "1-106622307").await.unwrap();
+        assert_eq!(post.slug().unwrap(), "20221010-1-106622307-HANDONG-내일이다!!오또캐~~~🫶🫶🫶🫶");
         assert_eq!(2, post.attachment.photo.unwrap().len());
     }
 
@@ -413,8 +453,10 @@ mod test {
         let client = Client::new();
         let auth = LOGIN_INFO.get_or_init(setup()).await;
         let post = post(&client, auth, "4-111010672").await.unwrap();
+        assert_eq!(post.slug().unwrap(), "20230111-4-111010672-GAHYEON-우리색 하늘");
         assert!(!post.author_moment_posts.unwrap().data.is_empty());
-        assert!(matches!(post.extension.unwrap(), MomentMedia::Video { .. }));
+        assert!(matches!(post.extension, Extension::Moment(_)));
+        assert!(post.extension.moment().unwrap().video().is_some());
     }
 
     #[tokio::test]
@@ -422,8 +464,10 @@ mod test {
         let client = Client::new();
         let auth = LOGIN_INFO.get_or_init(setup()).await;
         let post = post(&client, auth, "2-247595").await.unwrap();
+        assert_eq!(post.slug().unwrap(), "20220606-2-247595-YOOHYEON-여러분 비편열었다근데 일반게시물 같은 이 기분은…뭐지..왜 다들 비밀로 안써!비밀");
         assert!(!post.author_moment_posts.unwrap().data.is_empty());
-        assert!(matches!(post.extension.unwrap(), MomentMedia::Photo { .. }));
+        assert!(matches!(post.extension, Extension::MomentW1(_)));
+        assert!(post.extension.moment().unwrap().photo_url().is_some());
     }
 
     #[tokio::test]
@@ -431,8 +475,10 @@ mod test {
         let client = Client::new();
         let auth = LOGIN_INFO.get_or_init(setup()).await;
         let post = post(&client, auth, "1-14373893").await.unwrap();
+        assert_eq!(post.slug().unwrap(), "20220512-1-14373893-JI U-내 사랑❤️오늘도 수고해또❤️잘자❤️");
         assert!(!post.author_moment_posts.unwrap().data.is_empty());
-        assert!(matches!(post.extension.unwrap(), MomentMedia::Photo { .. }));
+        assert!(matches!(post.extension, Extension::MomentW1(_)));
+        assert!(post.extension.moment().unwrap().photo_url().is_some());
     }
 
     #[tokio::test]
@@ -441,5 +487,14 @@ mod test {
         let auth = LOGIN_INFO.get_or_init(setup()).await;
         let post = post(&client, auth, "2-103571496").await.unwrap();
         assert_eq!(post.next_moment_id(), Some(String::from("2-103510239")))
+    }
+
+    #[tokio::test]
+    async fn live() {
+        let client = Client::new();
+        let auth = LOGIN_INFO.get_or_init(setup()).await;
+        let post = post(&client, auth, "0-119057265").await.unwrap();
+        assert_eq!(post.slug().unwrap(), "20230510-0-119057265-YOOHYEON-안농");
+        assert!(matches!(post.extension, Extension::Video(_)));
     }
 }
