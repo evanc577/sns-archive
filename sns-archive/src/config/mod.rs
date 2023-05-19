@@ -7,6 +7,7 @@ use serde::de::Error;
 use serde::{Deserialize, Deserializer};
 
 use self::naver_post::NaverPostConfig;
+use self::tiktok::TikTokConfig;
 use self::twitter::TwitterConfig;
 use self::weibo::WeiboConfig;
 use self::weverse::WeverseConfig;
@@ -14,6 +15,7 @@ use self::xiaohongshu::XiaoHongShuConfig;
 use self::youtube::YoutubeConfig;
 
 pub mod naver_post;
+pub mod tiktok;
 pub mod twitter;
 pub mod weibo;
 pub mod weverse;
@@ -28,6 +30,7 @@ pub struct Config {
     pub naver_post: Option<NaverPostConfig>,
     pub xiaohongshu: Option<XiaoHongShuConfig>,
     pub weibo: Option<WeiboConfig>,
+    pub tiktok: Option<TikTokConfig>,
 }
 
 impl Config {

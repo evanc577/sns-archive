@@ -63,6 +63,12 @@ enum Sns {
     },
     /// Download Weibo user posts
     Weibo,
+    /// Download TikTok videos
+    Tiktok {
+        /// tiktok page html
+        #[clap(short, long, value_parser)]
+        input_file: Option<PathBuf>,
+    },
 }
 
 fn default_config_path() -> PathBuf {
@@ -131,6 +137,17 @@ async fn run() -> Result<()> {
                 sns_archive::weibo::download(conf).await?;
             } else {
                 return Err(anyhow!("Missing weibo section in config file"));
+            }
+        }
+        Sns::Tiktok { input_file } => {
+            if let Some(conf) = conf.tiktok {
+                if let Some(input) = input_file {
+                    sns_archive::tiktok::download_from_html(input).await?;
+                } else {
+                    sns_archive::tiktok::download(conf).await?;
+                }
+            } else {
+                return Err(anyhow!("Missing tiktok section in config file"));
             }
         }
     }

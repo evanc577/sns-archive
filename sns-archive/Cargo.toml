@@ -21,6 +21,7 @@ scraper = { workspace = true }
 sns_archive_common = { path = "../common" }
 tempfile = { workspace = true }
 thirtyfour = { workspace = true }
+tiktok = { path = "../tiktok" }
 unicode-segmentation = { workspace = true }
 url = { workspace = true }
 weibo = { path = "../weibo" }
