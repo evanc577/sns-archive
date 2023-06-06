@@ -293,15 +293,20 @@ impl ArtistPost {
         Ok(())
     }
 
-    async fn download_live(&self, client: &Client, auth: &str, directory: impl AsRef<Path>) -> Result<()> {
+    async fn download_live(
+        &self,
+        client: &Client,
+        auth: &str,
+        directory: impl AsRef<Path>,
+    ) -> Result<()> {
         let video_type = match self.extension {
-            Extension::Video(ref video) => {
-                VideoType::Extension(video.video.clone())
-            }
+            Extension::Video(ref video) => VideoType::Extension(video.video.clone()),
             _ => unreachable!(),
         };
         let secret = get_secret(client).await.unwrap();
-        let vod_info = vod_videos(client, auth, &video_type, &secret).await.unwrap();
+        let vod_info = vod_videos(client, auth, &video_type, &secret)
+            .await
+            .unwrap();
         let video_url = &vod_info.iter().max().unwrap().source;
         let url = Url::parse(video_url)?;
         let ext = url
@@ -386,7 +391,9 @@ impl ArtistPost {
             infra_id: video.upload_info.id,
         });
         let secret = get_secret(client).await.unwrap();
-        let vod_info = vod_videos(client, auth, &video_type, &secret).await.unwrap();
+        let vod_info = vod_videos(client, auth, &video_type, &secret)
+            .await
+            .unwrap();
         let video_url = &vod_info.iter().max().unwrap().source;
         let url = Url::parse(video_url)?;
         let ext = url

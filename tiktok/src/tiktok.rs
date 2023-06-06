@@ -122,7 +122,7 @@ impl SavablePost for TikTokVideo {
 }
 async fn video_info(client: &Client, url: &str) -> Result<TikTokVideo> {
     let snaptik_token = snaptik_token(client).await?;
-    for i in 0..5 {
+    for i in 0..10 {
         // Query TikTok
         let mut headers = HeaderMap::new();
         headers.insert(HOST, HeaderValue::from_static("www.tiktok.com"));
@@ -163,11 +163,12 @@ async fn video_info(client: &Client, url: &str) -> Result<TikTokVideo> {
             author: String,
         }
 
+        eprintln!("{}", &json);
         let info: TTInfo = serde_json::from_str(&json).unwrap();
         let x = match info.item_module.get(id) {
             Some(x) => x,
             None => {
-                let n = 1 << i;
+                let n = u64::min(1 << i, 30);
                 eprintln!("Missing ID for {}, sleeping {} seconds", &url, n);
                 tokio::time::sleep(Duration::from_secs(n)).await;
                 continue;

@@ -1950,7 +1950,7 @@ checksum = "a507befe795404456341dfab10cef66ead4c041f62b8b11bbb92bffe5d0953e0"
 
 [[package]]
 name = "sns-archive"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1964,6 +1964,7 @@ dependencies = [
  "infer",
  "itertools",
  "lazy_static",
+ "once_cell",
  "regex",
  "reqwest",
  "sanitize-filename",
@@ -1984,7 +1985,7 @@ dependencies = [
 
 [[package]]
 name = "sns_archive_common"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2183,7 +2184,7 @@ dependencies = [
 
 [[package]]
 name = "tiktok"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2597,7 +2598,7 @@ dependencies = [
 
 [[package]]
 name = "weibo"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2616,7 +2617,7 @@ dependencies = [
 
 [[package]]
 name = "weverse"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "async-once-cell",
