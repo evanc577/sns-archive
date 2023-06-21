@@ -74,14 +74,10 @@ impl<'a> TikTokClient<'a> {
                     OffsetDateTime::from_unix_timestamp(video_info.create_time.parse().unwrap())
                         .unwrap()
                         .to_offset(UtcOffset::from_hms(9, 0, 0).unwrap());
-                // Get download url
                 let user = video_info.author;
-
                 TikTokVideo { id, datetime, user }
             })
             .collect();
-
-        dbg!(&videos);
 
         Ok(videos)
     }
