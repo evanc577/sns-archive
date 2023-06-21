@@ -92,7 +92,7 @@ pub async fn download(json_file: impl AsRef<Path>, config: XiaoHongShuConfig) ->
         .kill_on_drop(true)
         .spawn()?;
     let mut caps = DesiredCapabilities::firefox();
-    caps.set("pageLoadStrategy".into(), serde_json::json!("none"));
+    caps.add("pageLoadStrategy", serde_json::json!("none"))?;
     let driver = loop {
         match WebDriver::new(DRIVER_ADDR, caps.clone()).await {
             Ok(d) => break d,
@@ -107,7 +107,7 @@ pub async fn download(json_file: impl AsRef<Path>, config: XiaoHongShuConfig) ->
     }
 
     // Close window
-    driver.close().await?;
+    driver.close_window().await?;
     driver.quit().await?;
 
     Ok(())
@@ -206,9 +206,9 @@ async fn download_file(url: impl AsRef<str>, path: impl AsRef<Path>) -> Result<(
 
 async fn get_date(driver: &WebDriver, id: &str) -> Result<String> {
     // Visit webpage
-    driver.get("about:blank").await?;
+    driver.goto("about:blank").await?;
     driver
-        .get(format!(
+        .goto(format!(
             "https://www.xiaohongshu.com/discovery/item/{}?xhsshare=CopyLink",
             id
         ))
@@ -219,7 +219,7 @@ async fn get_date(driver: &WebDriver, id: &str) -> Result<String> {
         if driver.current_url().await?.as_str().contains("captcha") {
             return Err(anyhow::anyhow!("Captcha page"));
         }
-        match driver.find_element(By::ClassName("publish-date")).await {
+        match driver.find(By::ClassName("publish-date")).await {
             Ok(e) => break e.text().await?,
             _ => time::sleep(Duration::from_secs(1)).await,
         }

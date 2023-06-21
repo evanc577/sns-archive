@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use anyhow::Result;
+use base64::{Engine as _, engine::general_purpose};
 use hmac::{Hmac, Mac};
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -60,7 +61,7 @@ pub(crate) async fn compute_url(base_url: &str, secret: &[u8]) -> Result<Url> {
 
     let mut mac = Hmac::<Sha1>::new_from_slice(secret)?;
     mac.update(&data_to_hash);
-    let digest = base64::encode(mac.finalize().into_bytes());
+    let digest = general_purpose::STANDARD.encode(mac.finalize().into_bytes());
 
     static DOMAIN: &str = "https://global.apis.naver.com/weverse/wevweb";
     let url = format!("{}{}", DOMAIN, base_url);
@@ -216,7 +217,7 @@ async fn store_authorization(username: &str, authoriazation: &str) -> Result<()>
     );
 
     let mut file = fs::File::create(filename).await?;
-    file.write_all(toml::to_vec(&authorizations)?.as_slice())
+    file.write_all(toml::to_string(&authorizations)?.as_bytes())
         .await?;
 
     Ok(())

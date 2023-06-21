@@ -16,4 +16,4 @@ filetime = { workspace = true }
 futures = { workspace = true }
 reqwest = { workspace = true, features = ["stream"] }
 time = { workspace = true }
-tokio = { workspace = true, default-features = false }
+tokio = { workspace = true }

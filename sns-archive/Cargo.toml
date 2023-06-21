@@ -36,31 +36,25 @@ features = ["derive"]
 
 [dependencies.chrono]
 workspace = true
-default-features = false
 features = ["std"]
 
 [dependencies.lazy_static]
 workspace = true
-default-features = false
 
 [dependencies.regex]
 workspace = true
-default-features = false
 features = ["std"]
 
 [dependencies.reqwest]
 workspace = true
-default-features = false
 features = ["rustls-tls", "json", "stream"]
 
 [dependencies.serde]
 workspace = true
-default-features = false
 features = ["derive"]
 
 [dependencies.serde_json]
 workspace = true
-default-features = false
 
 [dependencies.tokio]
 workspace = true
@@ -77,4 +71,3 @@ features = [
 
 [dependencies.toml]
 workspace = true
-default-features = false
