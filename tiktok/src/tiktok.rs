@@ -1,12 +1,9 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::process::Stdio;
-use std::time::Duration;
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use async_trait::async_trait;
-use futures::Stream;
-use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, HOST, USER_AGENT};
 use reqwest::Client;
 use scraper::{Html, Selector};
 use serde::Deserialize;
@@ -19,19 +16,10 @@ pub struct TikTokVideo {
     id: String,
     datetime: time::OffsetDateTime,
     user: String,
-    download_url: String,
 }
 
 pub struct TikTokClient<'a> {
     reqwest_client: &'a Client,
-}
-
-pub struct TikTokVideoShort {
-    url: String,
-}
-
-pub struct TikTokVideos {
-    all_urls: VecDeque<String>,
 }
 
 impl<'a> TikTokClient<'a> {
@@ -41,13 +29,12 @@ impl<'a> TikTokClient<'a> {
         }
     }
 
-    pub async fn videos_from_html(&self, html: &str) -> Result<TikTokVideos> {
-        let html = Html::parse_fragment(&html);
-        let urls = self.extract_videos(&html).await;
-        Ok(TikTokVideos::new(urls))
+    pub async fn videos_from_html(&self, html: &str) -> Result<Vec<TikTokVideo>> {
+        let html = Html::parse_fragment(html);
+        self.extract_videos(&html)
     }
 
-    pub async fn latest_user_videos(&self, user: &str) -> Result<TikTokVideos> {
+    pub async fn latest_user_videos(&self, user: &str) -> Result<Vec<TikTokVideo>> {
         let text = self
             .reqwest_client
             .get(format!("https://www.tiktok.com/@{}", user))
@@ -57,22 +44,52 @@ impl<'a> TikTokClient<'a> {
             .text()
             .await?;
         let html = Html::parse_fragment(&text);
-        let urls = self.extract_videos(&html).await;
-        Ok(TikTokVideos::new(urls))
+        self.extract_videos(&html)
     }
 
-    async fn extract_videos(&self, html: &Html) -> Vec<String> {
-        // Find posts list
-        let selector = Selector::parse("div[data-e2e=\"user-post-item-list\"]").unwrap();
-        let posts_list = html.select(&selector).next().unwrap();
+    fn extract_videos(&self, html: &Html) -> Result<Vec<TikTokVideo>> {
+        let selector = Selector::parse(r#"script#SIGI_STATE[type="application/json"]"#).unwrap();
+        let json = html.select(&selector).next().unwrap().inner_html();
 
-        // Parse posts link
-        let selector = Selector::parse("div[data-e2e=\"user-post-item\"] a").unwrap();
-        let links = posts_list
-            .select(&selector)
-            .map(|e| e.value().attr("href").unwrap().to_owned())
+        // Parse date and author
+        #[derive(Deserialize, Debug)]
+        struct TTInfo {
+            #[serde(rename = "ItemModule")]
+            item_module: BTreeMap<String, TTVideoInfo>,
+        }
+        #[derive(Deserialize, Debug)]
+        struct TTVideoInfo {
+            #[serde(rename = "createTime")]
+            create_time: String,
+            author: String,
+        }
+
+        let info: TTInfo = serde_json::from_str(&json).unwrap();
+        let videos = info
+            .item_module
+            .into_iter()
+            .rev()
+            .map(|(id, video_info)| {
+                let datetime =
+                    OffsetDateTime::from_unix_timestamp(video_info.create_time.parse().unwrap())
+                        .unwrap()
+                        .to_offset(UtcOffset::from_hms(9, 0, 0).unwrap());
+                // Get download url
+                let user = video_info.author;
+
+                TikTokVideo { id, datetime, user }
+            })
             .collect();
-        links
+
+        dbg!(&videos);
+
+        Ok(videos)
+    }
+}
+
+impl TikTokVideo {
+    fn url(&self) -> String {
+        format!("https://www.tiktok.com/@{}/video/{}", self.user, self.id)
     }
 }
 
@@ -84,7 +101,9 @@ impl SavablePost for TikTokVideo {
             .as_ref()
             .join(format!("{}.mp4.temp", self.slug()?));
 
-        let data = client.get(&self.download_url).send().await?.bytes().await?;
+        let snaptik_token = snaptik_token(client).await?;
+        let snaptik_url = snaptik_get_video(client, &snaptik_token, &self.url()).await?;
+        let data = client.get(snaptik_url).send().await?.bytes().await?;
         fs::write(&filename_temp, data).await?;
 
         // Convert to mp4
@@ -119,77 +138,6 @@ impl SavablePost for TikTokVideo {
         let slug = format!("{}_{}_{}", date_str, &self.id, &self.user);
         Ok(slug)
     }
-}
-async fn video_info(client: &Client, url: &str) -> Result<TikTokVideo> {
-    let snaptik_token = snaptik_token(client).await?;
-    for i in 0..10 {
-        // Query TikTok
-        let mut headers = HeaderMap::new();
-        headers.insert(HOST, HeaderValue::from_static("www.tiktok.com"));
-        headers.insert(ACCEPT, HeaderValue::from_static("*/*"));
-        headers.insert(USER_AGENT, HeaderValue::from_static("HTTPie/2.6.0"));
-        let text = client
-            .get(url)
-            .headers(headers)
-            .send()
-            .await
-            .unwrap()
-            .error_for_status()
-            .unwrap()
-            .text()
-            .await
-            .unwrap();
-        let html = Html::parse_fragment(&text);
-        let selector = Selector::parse(r#"script#SIGI_STATE[type="application/json"]"#).unwrap();
-        let json = if let Some(j) = html.select(&selector).next() {
-            j.inner_html()
-        } else {
-            continue;
-        };
-
-        // Get ID
-        let id = url.rsplit_once('/').unwrap().1;
-
-        // Parse date and author
-        #[derive(Deserialize)]
-        struct TTInfo {
-            #[serde(rename = "ItemModule")]
-            item_module: HashMap<String, TTVideoInfo>,
-        }
-        #[derive(Deserialize)]
-        struct TTVideoInfo {
-            #[serde(rename = "createTime")]
-            create_time: String,
-            author: String,
-        }
-
-        eprintln!("{}", &json);
-        let info: TTInfo = serde_json::from_str(&json).unwrap();
-        let x = match info.item_module.get(id) {
-            Some(x) => x,
-            None => {
-                let n = u64::min(1 << i, 30);
-                eprintln!("Missing ID for {}, sleeping {} seconds", &url, n);
-                tokio::time::sleep(Duration::from_secs(n)).await;
-                continue;
-            }
-        };
-        let datetime = OffsetDateTime::from_unix_timestamp(x.create_time.parse().unwrap())
-            .unwrap()
-            .to_offset(UtcOffset::from_hms(9, 0, 0).unwrap());
-
-        // Get download url
-        let download_url = snaptik_get_video(client, &snaptik_token, url).await?;
-
-        return Ok(TikTokVideo {
-            id: id.to_owned(),
-            datetime,
-            user: x.author.clone(),
-            download_url,
-        });
-    }
-
-    Err(anyhow!("Missing info for {}", url)).into()
 }
 
 async fn snaptik_get_video(client: &Client, token: &str, url: &str) -> Result<String> {
@@ -244,28 +192,4 @@ async fn snaptik_decode(text: &str) -> String {
 
     let mut script = js_sandbox::Script::from_string(&script).unwrap();
     script.call("decode", &()).unwrap()
-}
-
-impl TikTokVideoShort {
-    pub async fn video_info(&self, client: &Client) -> Result<TikTokVideo> {
-        video_info(client, &self.url).await
-    }
-}
-
-impl TikTokVideos {
-    fn new(urls: impl IntoIterator<Item = String>) -> Self {
-        Self {
-            all_urls: urls.into_iter().collect(),
-        }
-    }
-
-    pub async fn as_stream<'a>(&'a mut self) -> impl Stream<Item = Result<TikTokVideoShort>> + 'a {
-        futures::stream::unfold(self, |state| async {
-            // Pop off and return the next video if it exists
-            if let Some(url) = state.all_urls.pop_front() {
-                return Some((Ok(TikTokVideoShort { url }), state));
-            }
-            None
-        })
-    }
 }

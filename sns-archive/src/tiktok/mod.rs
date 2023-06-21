@@ -2,7 +2,6 @@ use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
 
 use anyhow::Result;
-use futures::stream::StreamExt;
 use reqwest::Client;
 use sns_archive_common::SavablePost;
 use tiktok::{TikTokClient, TikTokVideo};
@@ -15,11 +14,8 @@ pub async fn download(conf: TikTokConfig) -> Result<()> {
     let tt_client = TikTokClient::new(&client);
     for (user, user_config) in conf.users {
         println!("Downloading {} videos", &user);
-        let mut videos = tt_client.latest_user_videos(&user).await?;
-        let videos_stream = videos.as_stream().await;
-        futures::pin_mut!(videos_stream);
-        while let Some(v) = videos_stream.next().await {
-            let tt_video = v?.video_info(&client).await?;
+        let videos = tt_client.latest_user_videos(&user).await?;
+        for tt_video in videos {
             match download_video(&user_config.download_path, &client, tt_video).await? {
                 DownloadStatus::Downloaded => (),
                 DownloadStatus::Skipped => break,
@@ -33,11 +29,8 @@ pub async fn download_from_html(input_file: impl AsRef<Path>) -> Result<()> {
     let client = Client::new();
     let tt_client = TikTokClient::new(&client);
     let html = fs::read_to_string(input_file).await?;
-    let mut videos = tt_client.videos_from_html(&html).await?;
-    let videos_stream = videos.as_stream().await;
-    futures::pin_mut!(videos_stream);
-    while let Some(v) = videos_stream.next().await {
-        let tt_video = v?.video_info(&client).await?;
+    let videos = tt_client.videos_from_html(&html).await?;
+    for tt_video in videos {
         match download_video(std::env::current_dir()?, &client, tt_video).await? {
             DownloadStatus::Downloaded => (),
             DownloadStatus::Skipped => break,
