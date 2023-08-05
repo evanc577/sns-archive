@@ -125,7 +125,7 @@ async fn process_member(
             if let Some(filter) = filter {
                 filter.is_match(title)
             } else {
-                false
+                true
             }
         }
         None => false,
