@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
+#[cfg(target_family = "unix")]
 use home_dir::HomeDirExt;
 use regex::{Regex, RegexBuilder};
 use serde::de::Error;
@@ -45,7 +46,7 @@ where
     D: Deserializer<'de>,
 {
     let s: PathBuf = Deserialize::deserialize(deserializer)?;
-    s.expand_home().map_err(D::Error::custom)
+    expand_home::<D>(s)
 }
 
 fn deserialize_option_path<'de, D>(deserializer: D) -> Result<Option<PathBuf>, D::Error>
@@ -53,9 +54,25 @@ where
     D: Deserializer<'de>,
 {
     let s: Option<PathBuf> = Deserialize::deserialize(deserializer)?;
-    s.map(|p| p.expand_home().map_err(D::Error::custom))
-        .transpose()
+    s.map(|s| expand_home::<D>(s)).transpose()
 }
+
+#[cfg(target_family = "unix")]
+fn expand_home<'de, D>(path: impl AsRef<Path>) -> Result<PathBuf, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    path.expand_home().map_err(D::Error::custom)
+}
+
+#[cfg(target_family = "windows")]
+fn expand_home<'de, D>(path: impl AsRef<Path>) -> Result<PathBuf, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(path.as_ref().into())
+}
+
 
 fn deserialize_regex_option<'de, D>(deserializer: D) -> Result<Option<Regex>, D::Error>
 where

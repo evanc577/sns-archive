@@ -1,9 +1,7 @@
-use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
-
 use anyhow::Result;
 use reqwest::Client;
-use sns_archive_common::SavablePost;
+use sns_archive_common::{SavablePost, osstr_starts_with};
 use tiktok::{TikTokClient, TikTokVideo};
 use tokio::fs;
 
@@ -54,7 +52,7 @@ async fn download_video(
     fs::create_dir_all(&download_dir).await?;
     let mut read_dir = fs::read_dir(download_dir.as_ref()).await?;
     while let Some(f) = read_dir.next_entry().await? {
-        if f.file_name().as_bytes().starts_with(slug.as_bytes()) {
+        if osstr_starts_with(&f.file_name(), &slug) {
             return Ok(DownloadStatus::Skipped);
         }
     }

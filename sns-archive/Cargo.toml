@@ -11,7 +11,6 @@ anyhow = { workspace = true }
 directories = { workspace = true }
 fs_extra = { workspace = true }
 futures = { workspace = true }
-home-dir = { workspace = true }
 htmlescape = { workspace = true }
 indicatif = { workspace = true }
 infer = { workspace = true }
@@ -27,6 +26,9 @@ unicode-segmentation = { workspace = true }
 url = { workspace = true }
 weibo = { path = "../weibo" }
 weverse = { path = "../weverse" }
+
+[target.'cfg(unix)'.dependencies]
+home-dir = { workspace = true }
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

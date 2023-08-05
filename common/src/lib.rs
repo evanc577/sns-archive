@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::path::Path;
 
 use anyhow::Result;
@@ -39,4 +40,21 @@ pub fn set_mtime(path: impl AsRef<Path>, mtime: &OffsetDateTime) -> Result<()> {
     let mtime = filetime::FileTime::from_unix_time(secs, nanos);
     filetime::set_file_mtime(&path, mtime)?;
     Ok(())
+}
+
+pub fn osstr_starts_with(osstr: &OsStr, start: &str) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::prelude::OsStrExt;
+        osstr.as_bytes().starts_with(start.as_bytes())
+    }
+    #[cfg(windows)]
+    {
+        use std::ffi::OsString;
+        use std::str::FromStr;
+        use std::os::windows::prelude::OsStrExt;
+        let osstr_vec: Vec<u16> = osstr.encode_wide().collect();
+        let start_vec: Vec<u16> = OsString::from_str(start).unwrap().as_os_str().encode_wide().collect();
+        osstr_vec.starts_with(&start_vec[..])
+    }
 }

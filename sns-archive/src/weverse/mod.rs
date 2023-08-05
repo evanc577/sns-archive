@@ -1,11 +1,10 @@
 use std::fmt::Display;
-use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
 
 use anyhow::Result;
 use futures::{future, stream, StreamExt};
 use reqwest::Client;
-use sns_archive_common::SavablePost;
+use sns_archive_common::{SavablePost, osstr_starts_with};
 use tokio::fs;
 use weverse::endpoint::artist_tab_posts::ArtistPostShort;
 use weverse::endpoint::post::ArtistPost;
@@ -150,7 +149,7 @@ async fn download_live(
     let slug = post.slug()?;
     let mut read_dir = fs::read_dir(download_dir.as_ref()).await?;
     while let Some(f) = read_dir.next_entry().await? {
-        if f.file_name().as_bytes().starts_with(slug.as_bytes()) {
+        if osstr_starts_with(&f.file_name(), &slug) {
             return Ok(DownloadStatus::Skipped);
         }
     }
