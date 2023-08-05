@@ -100,6 +100,8 @@ fn generate_cmd_args(
     let mut args = vec![
         OsString::from("--format-sort"),
         "res,fps,vcodec,acodec".into(),
+        "--format".into(),
+        r#"bv*[format_note~="(P|p)remium"]+ba/bv*+ba/best"#.into(),
         "--ignore-config".into(),
         "--all-subs".into(),
         "--embed-subs".into(),
