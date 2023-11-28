@@ -14,10 +14,7 @@ pub async fn download(conf: TikTokConfig) -> Result<()> {
         println!("Downloading {} videos", &user);
         let videos = tt_client.latest_user_videos(&user).await?;
         for tt_video in videos {
-            match download_video(&user_config.download_path, &client, tt_video).await? {
-                DownloadStatus::Downloaded => (),
-                DownloadStatus::Skipped => break,
-            }
+            download_video(&user_config.download_path, &client, tt_video).await?;
         }
     }
     Ok(())
@@ -29,10 +26,7 @@ pub async fn download_from_html(input_file: impl AsRef<Path>) -> Result<()> {
     let html = fs::read_to_string(input_file).await?;
     let videos = tt_client.videos_from_html(&html).await?;
     for tt_video in videos {
-        match download_video(std::env::current_dir()?, &client, tt_video).await? {
-            DownloadStatus::Downloaded => (),
-            DownloadStatus::Skipped => break,
-        }
+        download_video(std::env::current_dir()?, &client, tt_video).await?;
     }
     Ok(())
 }
