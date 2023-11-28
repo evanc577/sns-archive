@@ -1,3 +1,3 @@
 mod tiktok;
 
-pub use tiktok::{TikTokClient, TikTokVideo};
+pub use crate::tiktok::{TikTokClient, TikTokVideo};

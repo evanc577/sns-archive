@@ -20,7 +20,9 @@ use crate::error::WeverseError;
 
 lazy_static! {
     static ref JS_RE: Regex = Regex::new(r#"src="(?P<url>[^"]*js/main.\w+\.js[^"]*)""#).unwrap();
-    static ref SECRET_RE: Regex = Regex::new(r#"return\s?"(?P<key>[a-fA-F0-9]{16,})""#).unwrap();
+    // TODO: Think of a better way to extract hmac secret
+    static ref SECRET_RE: Regex = Regex::new(r#"(?P<key>[a-f0-9]{40})"#).unwrap();
+    // static ref SECRET_RE: Regex = Regex::new(r#"return\s?"(?P<key>[a-fA-F0-9]{16,})""#).unwrap();
 }
 
 pub(crate) async fn get_secret(client: &Client) -> Result<Vec<u8>> {
@@ -76,7 +78,7 @@ pub(crate) async fn compute_url(base_url: &str, secret: &[u8]) -> Result<Url> {
 
 lazy_static! {
     static ref APP_JS_RE: Regex =
-        Regex::new(r#"\bsrc="(?P<path>.+?/_app-[0-9a-zA-Z]+\.js)""#).unwrap();
+        Regex::new(r#"\bsrc="(?P<path>[^"]*_app-[0-9a-zA-Z]+\.js)""#).unwrap();
     static ref APP_SECRET_RE: Regex =
         Regex::new(r#"\bAPP_SECRET,\s*"(?P<secret>[0-9a-zA-Z]+)""#).unwrap();
     static ref APP_VERSION_RE: Regex =
