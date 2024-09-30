@@ -22,6 +22,12 @@ struct Videos {
     list: Vec<Video>,
 }
 
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayInfoResponse {
+    play_info: VodResponse,
+}
+
 /// VOD video information
 #[derive(Deserialize, PartialEq, Eq, Clone, Debug)]
 pub struct Video {
@@ -108,49 +114,61 @@ pub(crate) async fn vod_videos(
     video_ids: &VideoType,
     secret: &[u8],
 ) -> Result<Vec<Video>> {
-    // Acquire inKey
-    let base_url = match video_ids {
-        VideoType::Extension(e) => format!(
-            "/video/v1.0/vod/{}/inKey?preview=false&appId={}&wpf=pc",
-            e.video_id, APP_ID
-        ),
-        VideoType::NoExtension(id) => format!(
-            "/cvideo/v1.0/cvideo-{}/inKey/?videoId={}&appId={}&language=en&platform=WEB&wpf=pc",
-            id.post_id, id.post_id, APP_ID
-        ),
+    let mut videos = match video_ids {
+        VideoType::Extension(e) => {
+            // Get inKey
+            let url = format!(
+                "/video/v1.0/vod/{}/inKey?preview=false&appId={}&wpf=pc",
+                e.video_id, APP_ID
+            );
+            let url = compute_url(&url, secret).await?;
+            let in_key = client.post(url.as_str())
+                .header(header::REFERER, REFERER)
+                .header(header::AUTHORIZATION, auth)
+                .send()
+                .await?
+                .error_for_status()?
+                .json::<InKeyResponse>()
+                .await?
+                .in_key;
+
+            // Get vod info
+            let url = format!(
+                "https://global.apis.naver.com/rmcnmv/rmcnmv/vod/play/v2.0/{}",
+                video_ids.infra_id()
+            );
+            client
+                .get(url)
+                .query(&[("key", in_key.as_str())])
+                .send()
+                .await?
+                .error_for_status()?
+                .json::<VodResponse>()
+                .await?
+                .videos
+                .list
+        }
+        VideoType::NoExtension(id) => {
+            // Get vod info directly
+            let url =  format!(
+                "/cvideo/v1.0/cvideo-{}/playInfo?videoId={}&appId={}&language=en&platform=WEB&wpf=pc",
+                id.post_id, id.post_id, APP_ID
+            );
+            let url = compute_url(&url, secret).await?;
+            client
+                .get(url.as_str())
+                .header(header::REFERER, REFERER)
+                .header(header::AUTHORIZATION, auth)
+                .send()
+                .await?
+                .error_for_status()?
+                .json::<PlayInfoResponse>()
+                .await?
+                .play_info
+                .videos
+                .list
+        }
     };
-    let inkey_url = compute_url(&base_url, secret).await?;
-
-    let req = match video_ids {
-        VideoType::Extension(_) => client.post(inkey_url.as_str()),
-        VideoType::NoExtension(_) => client.get(inkey_url.as_str()),
-    };
-
-    let in_key = req
-        .header(header::REFERER, REFERER)
-        .header(header::AUTHORIZATION, auth)
-        .send()
-        .await?
-        .error_for_status()?
-        .json::<InKeyResponse>()
-        .await?
-        .in_key;
-
-    // Get vod info
-    let url = format!(
-        "https://global.apis.naver.com/rmcnmv/rmcnmv/vod/play/v2.0/{}",
-        video_ids.infra_id()
-    );
-    let mut videos = client
-        .get(&url)
-        .query(&[("key", in_key.as_str())])
-        .send()
-        .await?
-        .error_for_status()?
-        .json::<VodResponse>()
-        .await?
-        .videos
-        .list;
     videos.sort();
 
     Ok(videos)

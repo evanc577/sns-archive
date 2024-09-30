@@ -19,7 +19,7 @@ impl Moments {
         let secret = get_secret(client).await?;
         let url = compute_url(
             &format!(
-                "/member/v1.0/community-{}/artistMembers?appId={}&fieldSet=artistMembersV1&language=en&platform=WEB&wpf=pc",
+                "/member/v1.1/community-{}/artistMembers?appId={}&fieldSet=artistMembersV1&language=en&platform=WEB&wpf=pc",
                 community_id.id(), APP_ID
                 ),
                 &secret,
