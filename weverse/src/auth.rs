@@ -2,7 +2,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use base64::{Engine as _, engine::general_purpose};
+use base64::engine::general_purpose;
+use base64::Engine as _;
 use hmac::{Hmac, Mac};
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -86,9 +87,21 @@ lazy_static! {
 }
 
 #[derive(Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct LoginInfo {
-    pub email: String,
-    pub password: String,
+    email: String,
+    password: String,
+    otp_session_id: String,
+}
+
+impl LoginInfo {
+    pub fn new(email: &str, password: &str) -> Self {
+        LoginInfo {
+            email: email.to_owned(),
+            password: password.to_owned(),
+            otp_session_id: String::from("BY_PASS"),
+        }
+    }
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -147,7 +160,7 @@ pub(crate) async fn login(client: &Client, login_info: &LoginInfo) -> Result<Str
 
     // Login
     let access_token = client
-        .post("https://accountapi.weverse.io/web/api/v2/auth/token/by-credentials")
+        .post("https://accountapi.weverse.io/web/api/v3/auth/token/by-credentials")
         .header(header::REFERER, "https://account.weverse.io/")
         .header(header::CONTENT_TYPE, "application/json")
         .header("x-acc-app-secret", x_acc_app_secret)

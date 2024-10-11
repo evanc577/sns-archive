@@ -14,10 +14,7 @@ use crate::config::weverse::WeverseConfig;
 
 pub async fn download(conf: WeverseConfig) -> Result<()> {
     let client = Client::new();
-    let login_info = LoginInfo {
-        email: conf.email,
-        password: conf.password,
-    };
+    let login_info = LoginInfo::new(&conf.email, &conf.password);
     let weverse_client = AuthenticatedWeverseClient::login(&client, &login_info).await?;
 
     let mut errored = false;
