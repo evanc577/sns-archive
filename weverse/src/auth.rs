@@ -14,7 +14,6 @@ use time::OffsetDateTime;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::Mutex;
-use uuid::Uuid;
 
 use crate::endpoint::me::me;
 use crate::error::WeverseError;
@@ -90,106 +89,95 @@ lazy_static! {
 #[serde(rename_all = "camelCase")]
 pub struct LoginInfo {
     email: String,
-    password: String,
-    otp_session_id: String,
 }
 
 impl LoginInfo {
-    pub fn new(email: &str, password: &str) -> Self {
+    pub fn new(email: &str) -> Self {
         LoginInfo {
             email: email.to_owned(),
-            password: password.to_owned(),
-            otp_session_id: String::from("BY_PASS"),
         }
     }
-}
-
-#[derive(Deserialize, Clone, Debug)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct LoginResponse {
-    access_token: String,
 }
 
 pub(crate) async fn login(client: &Client, login_info: &LoginInfo) -> Result<String> {
     // Check saved authorization
-    if let Ok(Some(auth)) = load_saved_authorization(&login_info.email).await {
+    let auth = if let Ok(Some(auth)) = load_saved_authorization(&login_info.email).await {
         // Check login status
-        if me(client, &auth).await.is_ok() {
-            return Ok(auth);
-        }
-    }
+        validate_or_refresh_bearer( client, &login_info.email, &auth).await?
+    } else {
+        return Err(WeverseError::Login)?;
+    };
 
-    // Extract app secrets
-    let login_page = client
-        .get("https://account.weverse.io/en/signup")
-        .send()
-        .await?
-        .error_for_status()?
-        .text()
-        .await?;
-    let js_path = APP_JS_RE
-        .captures(&login_page)
-        .ok_or(WeverseError::Login)?
-        .name("path")
-        .unwrap()
-        .as_str();
-    let url = format!("https://account.weverse.io{}", js_path);
-    let app_js = client
-        .get(url)
-        .send()
-        .await?
-        .error_for_status()?
-        .text()
-        .await?;
-    let x_acc_app_secret = APP_SECRET_RE
-        .captures(&app_js)
-        .ok_or(WeverseError::Login)?
-        .name("secret")
-        .unwrap()
-        .as_str();
-    let x_acc_app_version = APP_VERSION_RE
-        .captures(&app_js)
-        .ok_or(WeverseError::Login)?
-        .name("version")
-        .unwrap()
-        .as_str();
-
-    // Generate uuids
-    let x_acc_trace_id = Uuid::new_v4().to_string();
-    let x_clog_user_device_id = Uuid::new_v4().to_string();
-
-    // Login
-    let access_token = client
-        .post("https://accountapi.weverse.io/web/api/v3/auth/token/by-credentials")
-        .header(header::REFERER, "https://account.weverse.io/")
-        .header(header::CONTENT_TYPE, "application/json")
-        .header("x-acc-app-secret", x_acc_app_secret)
-        .header("x-acc-app-version", x_acc_app_version)
-        .header("x-acc-language", "en")
-        .header("x-acc-service-id", "weverse")
-        .header("x-acc-trace-id", x_acc_trace_id)
-        .header("x-clog-user-device-id", x_clog_user_device_id)
-        .json(login_info)
-        .send()
-        .await?
-        .error_for_status()?
-        .json::<LoginResponse>()
-        .await?
-        .access_token;
-    let access_token = format!("Bearer {}", access_token);
+    // Disable password login because it requires a captcha now
+    // let access_token = email_login(client, login_info).await?;
 
     // Check login status
-    me(client, &access_token).await?;
+    me(client, &auth.authorization).await?;
 
     // Save authorization
-    store_authorization(&login_info.email, &access_token).await?;
+    store_authorization(&login_info.email, &auth.authorization, &auth.refresh).await?;
 
-    Ok(access_token)
+    Ok(auth.authorization)
+}
+
+async fn validate_or_refresh_bearer(
+    client: &Client,
+    username: &str,
+    auth: &SavedAuthorization,
+) -> Result<SavedAuthorization> {
+    #[derive(Deserialize, Clone, Debug)]
+    #[serde(rename_all = "camelCase")]
+    struct ValidateResponse {
+        refresh_required: bool,
+    }
+    let valid: ValidateResponse = client
+        .get("https://accountapi.weverse.io/api/v1/token/validate")
+        .header("x-acc-service-id", "weverse")
+        .header(header::AUTHORIZATION, &format!("Bearer {}", auth.authorization))
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+
+    if !valid.refresh_required {
+        // Return current auth if not update is required
+        return Ok(auth.clone());
+    }
+
+    // Get a new bearer token with using the refresh token
+    #[derive(Serialize, Clone, Debug)]
+    #[serde(rename_all = "camelCase")]
+    struct RefreshRequestData {
+        refresh_token:  String,
+    }
+    #[derive(Deserialize, Clone, Debug)]
+    #[serde(rename_all = "camelCase")]
+    struct RefreshResponse {
+        access_token: String,
+        refresh_token:  String,
+    }
+    let new_token: RefreshResponse = client
+        .post("https://accountapi.weverse.io/api/v1/token/refresh")
+        .json(&RefreshRequestData { refresh_token: auth.refresh.clone()})
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    let new_saved_auth = SavedAuthorization {
+        authorization: new_token.access_token,
+        refresh: new_token.refresh_token,
+    };
+    store_authorization(username, &auth.authorization, &auth.refresh).await?;
+
+    Ok(new_saved_auth)
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 struct SavedAuthorization {
     authorization: String,
+    refresh: String,
 }
 
 static SAVED_AUTH_FILE_NAME: &str = "sns-archive/weverse_logins";
@@ -200,20 +188,18 @@ fn saved_authorization_file() -> Result<PathBuf> {
         .ok_or_else(|| WeverseError::SavedAuthFile.into())
 }
 
-async fn load_saved_authorization(username: &str) -> Result<Option<String>> {
+async fn load_saved_authorization(username: &str) -> Result<Option<SavedAuthorization>> {
     let filename = saved_authorization_file()?;
     let contents = fs::read_to_string(filename).await?;
     let authorizations: HashMap<String, SavedAuthorization> = toml::from_str(&contents)?;
-    Ok(authorizations
-        .get(username)
-        .map(|a| a.authorization.clone()))
+    Ok(authorizations.get(username).cloned())
 }
 
 lazy_static! {
     static ref AUTH_FILE_MTX: Mutex<()> = Mutex::new(());
 }
 
-async fn store_authorization(username: &str, authoriazation: &str) -> Result<()> {
+async fn store_authorization(username: &str, authoriazation: &str, refresh: &str) -> Result<()> {
     let _guard = AUTH_FILE_MTX.lock().await;
 
     let filename = saved_authorization_file()?;
@@ -228,6 +214,7 @@ async fn store_authorization(username: &str, authoriazation: &str) -> Result<()>
         username.to_string(),
         SavedAuthorization {
             authorization: authoriazation.to_string(),
+            refresh: refresh.to_string(),
         },
     );
 
@@ -255,8 +242,8 @@ mod test {
         // Read secrets
         let _ = dotenv();
         let email = std::env::var("WEVERSE_EMAIL").unwrap();
-        let password = std::env::var("WEVERSE_PASSWORD").unwrap();
-        let login_info = LoginInfo { email, password };
+        // let password = std::env::var("WEVERSE_PASSWORD").unwrap();
+        let login_info = LoginInfo { email };
 
         let client = Client::new();
         login(&client, &login_info).await.unwrap();

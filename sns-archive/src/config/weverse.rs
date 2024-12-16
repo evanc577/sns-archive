@@ -7,7 +7,7 @@ use serde::Deserialize;
 #[derive(Debug, Deserialize, Clone)]
 pub struct WeverseConfig {
     pub email: String,
-    pub password: String,
+    // pub password: String,
     #[serde(default = "default_num_processes")]
     pub max_connections: usize,
     pub artists: HashMap<String, ArtistConfig>,
