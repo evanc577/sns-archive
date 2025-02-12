@@ -6,6 +6,7 @@ use anyhow::Result;
 use serde::{Deserialize, Deserializer};
 use thirtyfour::prelude::*;
 use thirtyfour::CapabilitiesHelper;
+use thirtyfour::PageLoadStrategy;
 use tokio::io::AsyncWriteExt;
 use tokio::{fs, process, time};
 use unicode_segmentation::UnicodeSegmentation;
@@ -92,7 +93,7 @@ pub async fn download(json_file: impl AsRef<Path>, config: XiaoHongShuConfig) ->
         .kill_on_drop(true)
         .spawn()?;
     let mut caps = DesiredCapabilities::firefox();
-    caps.add("pageLoadStrategy", serde_json::json!("none"))?;
+    caps.set_page_load_strategy(PageLoadStrategy::None)?;
     let driver = loop {
         match WebDriver::new(DRIVER_ADDR, caps.clone()).await {
             Ok(d) => break d,

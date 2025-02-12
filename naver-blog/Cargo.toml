@@ -1,0 +1,12 @@
+[package]
+name = "naver-blog"
+edition = "2021"
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+regex = { workspace = true }
+reqwest = { workspace = true }
