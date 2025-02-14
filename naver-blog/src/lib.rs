@@ -3,6 +3,8 @@ mod error;
 mod download_post;
 mod util;
 mod member_posts;
+mod progress_bar;
 
-pub use naver_blog_client::NaverBlogClient;
 pub use error::NaverBlogError;
+pub use naver_blog_client::NaverBlogClient;
+pub use progress_bar::ProgressBar;

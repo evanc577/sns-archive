@@ -9,6 +9,7 @@ license.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true }
+indicatif = { workspace = true }
 klask = { workspace = true }
 naver-blog = { path = "../naver-blog" }
 regex = { workspace = true }

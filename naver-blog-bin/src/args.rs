@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueHint};
-use naver_blog::NaverBlogClient;
+use naver_blog::{NaverBlogClient, ProgressBar};
 use regex::RegexBuilder;
 
 #[derive(Parser, Debug)]
@@ -37,13 +37,13 @@ pub enum Commands {
 }
 
 impl Args {
-    pub async fn download(&self) -> Result<()> {
+    pub async fn download<PB: ProgressBar>(&self) -> Result<()> {
         let reqwest_client = reqwest::Client::new();
         let client = NaverBlogClient::new(&reqwest_client);
 
         match &self.command {
             Commands::Url { url } => {
-                client.download_url(url, &self.download_path).await?;
+                client.download_url::<PB>(url, &self.download_path).await?;
             }
             Commands::Member {
                 blog_id,
@@ -55,7 +55,7 @@ impl Args {
                     .map(|f| RegexBuilder::new(f).case_insensitive(true).build())
                     .transpose()?;
                 client
-                    .download_member(blog_id, &self.download_path, filter.as_ref(), *limit)
+                    .download_member::<PB>(blog_id, &self.download_path, filter.as_ref(), *limit)
                     .await?;
             }
         }

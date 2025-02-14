@@ -7,7 +7,7 @@ use reqwest::Url;
 use tokio::io::AsyncWriteExt;
 
 use crate::util::{parse_date, slug, NaverBlogMetadata};
-use crate::{NaverBlogClient, NaverBlogError};
+use crate::{NaverBlogClient, NaverBlogError, ProgressBar};
 
 pub(crate) enum NaverBlogDownloadStatus {
     Downloaded,
@@ -15,7 +15,7 @@ pub(crate) enum NaverBlogDownloadStatus {
 }
 
 impl NaverBlogClient<'_> {
-    pub(crate) async fn download_post(
+    pub(crate) async fn download_post<PB: ProgressBar>(
         &self,
         download_path: impl AsRef<Path>,
         member: &str,
@@ -69,12 +69,7 @@ impl NaverBlogClient<'_> {
         let images = extract_images(&document);
 
         // Progress bar
-        let pb = indicatif::ProgressBar::new(images.len() as u64);
-        let sty = indicatif::ProgressStyle::default_bar()
-            .template("[{wide_bar}] {pos:>3}/{len:3}")
-            .unwrap()
-            .progress_chars("=> ");
-        pb.set_style(sty);
+        let pb = PB::init(images.len(), &blog_post_url);
 
         // Create temporary directory to download images to
         let tmp_dir_path = download_path.as_ref().join(format!(".tmp.{slug}"));
@@ -123,8 +118,7 @@ impl NaverBlogClient<'_> {
             }
         }
 
-        pb.finish_and_clear();
-        eprintln!("OK");
+        pb.destroy();
 
         Ok(NaverBlogDownloadStatus::Downloaded)
     }
@@ -195,21 +189,21 @@ struct DownloadImageError {
     msg: String,
 }
 
-async fn download_images(
+async fn download_images<PB: ProgressBar>(
     client: &reqwest::Client,
     download_dir: impl AsRef<Path>,
     urls: &[String],
     slug: &str,
-    pb: &indicatif::ProgressBar,
+    pb: &PB,
 ) -> Result<(), DownloadImageError> {
     // Helper function to download a single image
-    async fn download_one_image(
+    async fn download_one_image<PB: ProgressBar>(
         client: &reqwest::Client,
         base_dir: impl AsRef<Path>,
         index: usize,
         slug: &str,
         url: String,
-        pb: &indicatif::ProgressBar,
+        pb: &PB,
     ) -> Result<(), DownloadImageError> {
         // Download to a temp file without extension first
         let err_func = |e: reqwest::Error| -> _ {
@@ -248,7 +242,7 @@ async fn download_images(
         let mut file = tokio::fs::File::create(file).await.map_err(err_func)?;
         file.write_all(&bytes).await.map_err(err_func)?;
 
-        pb.inc(1);
+        pb.increment();
 
         Ok(())
     }

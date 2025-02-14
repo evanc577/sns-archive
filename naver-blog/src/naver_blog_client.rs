@@ -7,6 +7,7 @@ use reqwest::{Client, Url};
 
 use crate::download_post::NaverBlogDownloadStatus;
 use crate::member_posts::GetPostsRequest;
+use crate::progress_bar::ProgressBar;
 use crate::NaverBlogError;
 
 pub struct NaverBlogClient<'client> {
@@ -18,7 +19,7 @@ impl<'client> NaverBlogClient<'client> {
         Self { client }
     }
 
-    pub async fn download_member(
+    pub async fn download_member<PB: ProgressBar>(
         &self,
         member: &str,
         download_path: impl AsRef<Path>,
@@ -46,7 +47,7 @@ impl<'client> NaverBlogClient<'client> {
 
             // Download the post
             let download_result = self
-                .download_post(download_path.as_ref(), member, stub.post_id)
+                .download_post::<PB>(download_path.as_ref(), member, stub.post_id)
                 .await?;
             match download_result {
                 NaverBlogDownloadStatus::Downloaded => {}
@@ -56,7 +57,7 @@ impl<'client> NaverBlogClient<'client> {
         Ok(())
     }
 
-    pub async fn download_url(
+    pub async fn download_url<PB: ProgressBar>(
         &self,
         url: &str,
         download_path: impl AsRef<Path>,
@@ -64,7 +65,7 @@ impl<'client> NaverBlogClient<'client> {
         let blog_id = parse_url(url).ok_or(NaverBlogError::InvalidUrl {
             url: url.to_owned(),
         })?;
-        self.download_post(download_path, &blog_id.member, blog_id.id)
+        self.download_post::<PB>(download_path, &blog_id.member, blog_id.id)
             .await?;
         Ok(())
     }
