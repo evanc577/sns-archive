@@ -16,12 +16,12 @@ reqwest = { workspace = true, features = ["rustls-tls"] }
 tokio = { workspace = true, features = ["macros"] }
 
 [lib]
-path = "src/core/lib.rs"
+path = "src/lib.rs"
 
 [[bin]]
 name = "naver-blog-cli"
-path = "src/cli/main.rs"
+path = "src/cli.rs"
 
 [[bin]]
 name = "naver-blog-gui"
-path = "src/gui/main.rs"
+path = "src/gui.rs"

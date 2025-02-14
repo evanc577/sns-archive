@@ -17,7 +17,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-  upload-assets:
+  build-upload-bins:
     strategy:
       fail-fast: false
       matrix:
@@ -41,7 +41,8 @@ jobs:
         with:
           bin: sns-archive,naver-blog-cli,naver-blog-gui
           target: ${{ matrix.target }}
-          archive: ${{ matrix.os }}-bin
+          archive: ${{ github.event.repository.name }}-${{ matrix.os }}-${{ github.ref_name }}
+          include: LICENSE
           tar: unix
           zip: windows
           token: ${{ secrets.GITHUB_TOKEN }}

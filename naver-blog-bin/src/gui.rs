@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 use klask::Settings;
 use naver_blog_bin::Args;
 

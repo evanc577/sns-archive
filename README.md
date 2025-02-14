@@ -4,10 +4,9 @@ Unified SNS archiver
 
 Currently supports:
 
-* Twitter
 * Weverse
 * Youtube
-* Naver post
+* Naver blog
 * Xiaohongshu (experimental, requires json from app)
 * Weibo
 
@@ -52,18 +51,6 @@ lives_download_path = "sns/weverse/lives"
 users = [
   { user = 7317173686, download_path = "sns/weibo/韩东_捕梦网" },
 ]
-
-# Twitter (currently broken)
-#
-# bearer:          Twitter API bearer token
-# download_path:   Path to download files to
-# timezone_offset: (Optional) (Default: 0) Timezone offset in seconds
-# users:           List of Twitter usernames
-[twitter]
-bearer = ""
-download_path = "sns/twitter"
-timezone_offset = 32400
-users = ["hf_dreamcatcher"]
 
 # YouTube
 #
