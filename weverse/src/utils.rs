@@ -61,8 +61,7 @@ pub async fn setup() -> String {
 
     let _ = dotenv();
     let email = std::env::var("WEVERSE_EMAIL").unwrap();
-    let password = std::env::var("WEVERSE_PASSWORD").unwrap();
-    let login_info = LoginInfo { email, password };
+    let login_info = LoginInfo::new(&email);
 
     let client = Client::new();
     login(&client, &login_info).await.unwrap()

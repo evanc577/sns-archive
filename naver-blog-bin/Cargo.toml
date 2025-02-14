@@ -7,3 +7,21 @@ description.workspace = true
 license.workspace = true
 
 [dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+klask = { workspace = true }
+naver-blog = { path = "../naver-blog" }
+regex = { workspace = true }
+reqwest = { workspace = true }
+tokio = { workspace = true, features = ["macros"] }
+
+[lib]
+path = "src/core/lib.rs"
+
+[[bin]]
+name = "naver-blog-cli"
+path = "src/cli/main.rs"
+
+[[bin]]
+name = "naver-blog-gui"
+path = "src/gui/main.rs"
