@@ -52,12 +52,21 @@ impl NaverBlogClient<'_> {
         let blog_post_url = format!("https://blog.naver.com/{member}/{id}");
 
         // Skip if the blog post has already been downloaded
-        if tokio::fs::metadata(&slug).await.is_ok() {
+        if tokio::fs::metadata(download_path.as_ref().join(&slug))
+            .await
+            .is_ok()
+        {
             return Ok(());
         }
 
         // Download blog post
-        eprintln!("Downloading {}", &metadata.title);
+        eprintln!("Downloading {}", &blog_post_url);
+        let pb = indicatif::ProgressBar::new(images.len() as u64);
+        let sty = indicatif::ProgressStyle::default_bar()
+            .template("[{wide_bar}] {pos:>3}/{len:3}")
+            .unwrap()
+            .progress_chars("=> ");
+        pb.set_style(sty);
 
         // Create temporary directory to download images to
         let tmp_dir_path = download_path.as_ref().join(format!(".tmp.{slug}"));
@@ -69,7 +78,7 @@ impl NaverBlogClient<'_> {
             })?;
 
         // Download images
-        download_images(self.client, &tmp_dir_path, images, &slug)
+        download_images(self.client, &tmp_dir_path, &images[..], &slug, &pb)
             .await
             .map_err(|e| NaverBlogError::DownloadImage {
                 blog_post_url: url.to_string(),
@@ -82,11 +91,12 @@ impl NaverBlogClient<'_> {
         tokio::fs::rename(tmp_dir_path, final_dir_path)
             .await
             .map_err(|e| NaverBlogError::DownloadBlogPost {
-                blog_post_url,
+                blog_post_url: blog_post_url.clone(),
                 msg: e.to_string(),
             })?;
 
-        eprintln!("Downloaded {}", &metadata.title);
+        pb.finish_and_clear();
+        eprintln!("Downloaded {}", &blog_post_url);
 
         Ok(())
     }
@@ -125,7 +135,7 @@ fn extract_post_metadata(
     })
 }
 
-fn extract_images(document: &scraper::Html) -> impl Iterator<Item = String> + '_ {
+fn extract_images(document: &scraper::Html) -> Vec<String> {
     static SELECTOR: LazyLock<scraper::Selector> = LazyLock::new(|| {
         scraper::Selector::parse(".se-main-container .se-module-image-link > img").unwrap()
     });
@@ -140,6 +150,7 @@ fn extract_images(document: &scraper::Html) -> impl Iterator<Item = String> + '_
             url.set_query(Some(FULL_RES_TYPE));
             Some(url.to_string())
         })
+        .collect()
 }
 
 struct DownloadImageError {
@@ -150,8 +161,9 @@ struct DownloadImageError {
 async fn download_images(
     client: &reqwest::Client,
     download_dir: impl AsRef<Path>,
-    urls: impl Iterator<Item = String>,
+    urls: &[String],
     slug: &str,
+    pb: &indicatif::ProgressBar,
 ) -> Result<(), DownloadImageError> {
     // Helper function to download a single image
     async fn download_one_image(
@@ -160,6 +172,7 @@ async fn download_images(
         index: usize,
         slug: &str,
         url: String,
+        pb: &indicatif::ProgressBar,
     ) -> Result<(), DownloadImageError> {
         // Download to a temp file without extension first
         let err_func = |e: reqwest::Error| -> _ {
@@ -198,14 +211,15 @@ async fn download_images(
         let mut file = tokio::fs::File::create(file).await.map_err(err_func)?;
         file.write_all(&bytes).await.map_err(err_func)?;
 
+        pb.inc(1);
+
         Ok(())
     }
 
     // Download images concurrently
-    futures::stream::iter(
-        urls.enumerate()
-            .map(|(i, url)| download_one_image(client, download_dir.as_ref(), i, slug, url)),
-    )
+    futures::stream::iter(urls.iter().enumerate().map(|(i, url)| {
+        download_one_image(client, download_dir.as_ref(), i, slug, url.clone(), pb)
+    }))
     .buffer_unordered(20)
     .collect::<Vec<_>>()
     .await
