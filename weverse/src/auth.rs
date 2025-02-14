@@ -204,11 +204,7 @@ async fn store_authorization(username: &str, authoriazation: &str, refresh: &str
 
     let filename = saved_authorization_file()?;
     fs::create_dir_all(&filename.parent().unwrap()).await?;
-    let contents = if let Ok(c) = fs::read_to_string(&filename).await {
-        c
-    } else {
-        Default::default()
-    };
+    let contents = fs::read_to_string(&filename).await.unwrap_or_default();
     let mut authorizations: HashMap<String, SavedAuthorization> = toml::from_str(&contents)?;
     authorizations.insert(
         username.to_string(),
