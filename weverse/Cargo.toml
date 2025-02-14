@@ -17,7 +17,7 @@ futures = { workspace = true }
 hmac = { workspace = true }
 lazy_static = { workspace = true }
 regex = { workspace = true }
-reqwest = { workspace = true, features = ["json"] }
+reqwest = { workspace = true, features = ["rustls-tls", "json"] }
 sanitize-filename = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }

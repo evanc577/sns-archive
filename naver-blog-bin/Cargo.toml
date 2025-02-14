@@ -12,7 +12,7 @@ clap = { workspace = true }
 klask = { workspace = true }
 naver-blog = { path = "../naver-blog" }
 regex = { workspace = true }
-reqwest = { workspace = true }
+reqwest = { workspace = true, features = ["rustls-tls"] }
 tokio = { workspace = true, features = ["macros"] }
 
 [lib]

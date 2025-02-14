@@ -14,6 +14,6 @@ anyhow = { workspace = true }
 async-trait = { workspace = true }
 filetime = { workspace = true }
 futures = { workspace = true }
-reqwest = { workspace = true, features = ["stream"] }
+reqwest = { workspace = true, features = ["rustls-tls", "stream"] }
 time = { workspace = true }
 tokio = { workspace = true }

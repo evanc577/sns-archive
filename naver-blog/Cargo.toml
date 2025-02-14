@@ -14,7 +14,7 @@ infer = { workspace = true }
 jiff = { workspace = true }
 page-turner = { workspace = true }
 regex = { workspace = true }
-reqwest = { workspace = true }
+reqwest = { workspace = true, features = ["rustls-tls"] }
 sanitize-filename = { workspace = true }
 scraper = { workspace = true }
 serde = { workspace = true }
