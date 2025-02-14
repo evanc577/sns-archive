@@ -52,7 +52,6 @@ impl NaverBlogClient<'_> {
                 msg,
             }
         })?;
-        let images = extract_images(&document);
         let slug = slug(&metadata);
         let blog_post_url = format!("https://blog.naver.com/{member}/{id}");
 
@@ -66,6 +65,9 @@ impl NaverBlogClient<'_> {
 
         // Download blog post
         eprintln!("Downloading {}", &blog_post_url);
+        let images = extract_images(&document);
+
+        // Progress bar
         let pb = indicatif::ProgressBar::new(images.len() as u64);
         let sty = indicatif::ProgressStyle::default_bar()
             .template("[{wide_bar}] {pos:>3}/{len:3}")
@@ -144,7 +146,6 @@ fn extract_images(document: &scraper::Html) -> Vec<String> {
     static SELECTOR: LazyLock<scraper::Selector> = LazyLock::new(|| {
         scraper::Selector::parse(".se-main-container .se-module-image-link > img").unwrap()
     });
-    static FULL_RES_TYPE: &str = "type=w3840";
 
     document
         .select(&SELECTOR)
@@ -152,7 +153,17 @@ fn extract_images(document: &scraper::Html) -> Vec<String> {
         .filter_map(|s| {
             // Change the query parameter to get the high res / original version
             let mut url = Url::parse(s).ok()?;
-            url.set_query(Some(FULL_RES_TYPE));
+            match url.domain() {
+                Some("postfiles.pstatic.net") => {
+                    url.set_query(Some("type=w3840"));
+                }
+                Some("mblogthumb-phinf.pstatic.net") => {
+                    url.set_query(Some("type=o_webp"));
+                }
+                _ => {
+                    eprintln!("INFO: external image: {:?}", url.as_str());
+                }
+            }
             Some(url.to_string())
         })
         .collect()

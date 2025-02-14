@@ -39,7 +39,7 @@ impl<'client> NaverBlogClient<'client> {
 
             // Check title filter
             if let Some(re) = filter {
-                if re.is_match(&stub.title) {
+                if !re.is_match(&stub.title) {
                     continue;
                 }
             }
