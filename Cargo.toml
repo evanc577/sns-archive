@@ -1,3 +1,7 @@
+[profile.release]
+strip = true
+lto = "fat"
+
 [workspace]
 members = ["common", "weibo", "weverse", "tiktok", "sns-archive", "naver-blog", "naver-blog-bin"]
 resolver = "2"

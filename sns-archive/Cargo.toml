@@ -16,6 +16,7 @@ indicatif = { workspace = true }
 infer = { workspace = true }
 itertools = { workspace = true }
 once_cell = { workspace = true }
+naver-blog = { path = "../naver-blog" }
 sanitize-filename = { workspace = true }
 scraper = { workspace = true }
 sns_archive_common = { path = "../common" }

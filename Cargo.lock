@@ -4041,6 +4041,7 @@ dependencies = [
  "infer",
  "itertools",
  "lazy_static",
+ "naver-blog",
  "once_cell",
  "regex",
  "reqwest",

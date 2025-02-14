@@ -7,14 +7,13 @@ use sns_archive::config::Config;
 
 /// Archive various social networking services
 #[derive(Parser, Debug)]
-#[clap(author, version, about)]
+#[command(author, version, about)]
 struct Args {
     /// Services to archive
-    #[clap(subcommand)]
-    sns: Sns,
+    #[clap(subcommand)] sns: Sns,
 
     /// Config file location
-    #[clap(short, long, default_value_os_t = default_config_path(), value_parser)]
+    #[arg(short, long, default_value_os_t = default_config_path())]
     config: PathBuf,
 }
 
@@ -23,42 +22,25 @@ enum Sns {
     /// Download Twitter tweets
     Twitter {
         /// Read tweets to save from input file, 1 tweet ID per line
-        #[clap(short, long, value_parser)]
+        #[arg(short, long)]
         input: Option<PathBuf>,
 
         /// Only save tweets from user
-        #[clap(short, long, value_parser)]
+        #[arg(short, long)]
         filter: Option<String>,
     },
     /// Download Weverse posts and moments
-    ///
-    /// Example config.toml section:
-    ///
-    /// [weverse]
-    /// # Weverse login information
-    /// email = ""
-    /// password = ""
-    /// # Maximum number of concurrent network connections (optional, default 20)
-    /// max_connections = {integer}
-    ///
-    /// # Section for each artist to archive
-    /// [weverse.artists.dreamcatcher]
-    /// # Directory to save artist posts (optional, don't download posts if none)
-    /// artist_download_path = "path/to/directory"
-    /// # Directory to save artist moments (optiona, don't download moments if none)
-    /// moments_download_path = "path/to/directory"
-    #[clap(verbatim_doc_comment)]
+    #[command(verbatim_doc_comment)]
     Weverse,
     /// Download Youtube videos
     Youtube,
-    /// Download Naver post images
+    /// Download Naver Blog post images
     NaverPost,
     /// (Experimental) Download Xiao Hong Shu images and videos
     XiaoHongShu {
         /// API response from XiaoHongShu app from endpoint
         /// https://edith.xiaohongshu.com/api/sns/v4/note/user/posted
         /// Need to sniff app traffic
-        #[clap(value_parser)]
         json_file: PathBuf,
     },
     /// Download Weibo user posts
@@ -66,7 +48,7 @@ enum Sns {
     /// Download TikTok videos
     Tiktok {
         /// tiktok page html
-        #[clap(short, long, value_parser)]
+        #[arg(short, long)]
         input_file: Option<PathBuf>,
     },
 }
