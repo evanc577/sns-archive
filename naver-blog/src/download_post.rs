@@ -8,13 +8,18 @@ use tokio::io::AsyncWriteExt;
 use crate::util::{parse_date, slug, NaverBlogMetadata};
 use crate::{NaverBlogClient, NaverBlogError};
 
+pub(crate) enum NaverBlogDownloadStatus {
+    Downloaded,
+    Exists,
+}
+
 impl NaverBlogClient<'_> {
     pub(crate) async fn download_post(
         &self,
         download_path: impl AsRef<Path>,
         member: &str,
         id: u64,
-    ) -> Result<(), NaverBlogError> {
+    ) -> Result<NaverBlogDownloadStatus, NaverBlogError> {
         // Get the page HTML
         let mut url = Url::parse("https://blog.naver.com/PostView.naver").unwrap();
         url.query_pairs_mut()
@@ -56,7 +61,7 @@ impl NaverBlogClient<'_> {
             .await
             .is_ok()
         {
-            return Ok(());
+            return Ok(NaverBlogDownloadStatus::Exists);
         }
 
         // Download blog post
@@ -96,9 +101,9 @@ impl NaverBlogClient<'_> {
             })?;
 
         pb.finish_and_clear();
-        eprintln!("Downloaded {}", &blog_post_url);
+        eprintln!("OK");
 
-        Ok(())
+        Ok(NaverBlogDownloadStatus::Downloaded)
     }
 }
 

@@ -41,7 +41,6 @@ impl Args {
         let reqwest_client = reqwest::Client::new();
         let client = NaverBlogClient::new(&reqwest_client);
 
-        println!("{self:#?}");
         match &self.command {
             Commands::Url { url } => {
                 client.download_url(url, &self.download_path).await?;

@@ -8,13 +8,18 @@ license.workspace = true
 
 [dependencies]
 futures = { workspace = true }
+htmlize = { workspace = true, features = ["unescape"] }
 indicatif = { workspace = true }
 infer = { workspace = true }
 jiff = { workspace = true }
+page-turner = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
 sanitize-filename = { workspace = true }
 scraper = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
-unicode-segmentation = "1.12"
+unicode-segmentation = { workspace = true }
+urlencoding = { workspace = true }

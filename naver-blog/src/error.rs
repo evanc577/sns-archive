@@ -29,4 +29,11 @@ pub enum NaverBlogError {
         blog_post_url: String,
         msg: String,
     },
+
+    #[error("unable to fetch blog posts list member: {member}, page: {page}, {msg}")]
+    FetchBlogPostList {
+        member: String,
+        page: usize,
+        msg: String,
+    },
 }

@@ -1,8 +1,12 @@
 use std::path::Path;
 
+use futures::TryStreamExt;
+use page_turner::{PageTurner, PagesStream};
 use regex::Regex;
 use reqwest::{Client, Url};
 
+use crate::download_post::NaverBlogDownloadStatus;
+use crate::member_posts::GetPostsRequest;
 use crate::NaverBlogError;
 
 pub struct NaverBlogClient<'client> {
@@ -21,7 +25,35 @@ impl<'client> NaverBlogClient<'client> {
         filter: Option<&Regex>,
         limit: Option<usize>,
     ) -> Result<(), NaverBlogError> {
-        todo!()
+        let stream = self.pages(GetPostsRequest::new(member.to_owned())).items();
+        futures::pin_mut!(stream);
+        let mut idx = 0;
+        while let Some(stub) = stream.try_next().await? {
+            // Break if limit is enabled and reached
+            if let Some(limit) = limit {
+                if idx >= limit {
+                    break;
+                }
+            }
+            idx += 1;
+
+            // Check title filter
+            if let Some(re) = filter {
+                if re.is_match(&stub.title) {
+                    continue;
+                }
+            }
+
+            // Download the post
+            let download_result = self
+                .download_post(download_path.as_ref(), member, stub.post_id)
+                .await?;
+            match download_result {
+                NaverBlogDownloadStatus::Downloaded => {}
+                NaverBlogDownloadStatus::Exists => break,
+            }
+        }
+        Ok(())
     }
 
     pub async fn download_url(
@@ -32,7 +64,8 @@ impl<'client> NaverBlogClient<'client> {
         let blog_id = parse_url(url).ok_or(NaverBlogError::InvalidUrl {
             url: url.to_owned(),
         })?;
-        self.download_post(download_path, &blog_id.member, blog_id.id).await?;
+        self.download_post(download_path, &blog_id.member, blog_id.id)
+            .await?;
         Ok(())
     }
 }
