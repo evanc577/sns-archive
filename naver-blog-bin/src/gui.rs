@@ -10,6 +10,5 @@ fn main() {
         if let Err(e) = rt.block_on(async { args.download().await }) {
             eprintln!("Error: {e}");
         }
-        eprintln!("Finished");
     })
 }
