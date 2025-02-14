@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueHint};
 use naver_blog::NaverBlogClient;
-use regex::Regex;
+use regex::RegexBuilder;
 
 #[derive(Parser, Debug)]
 pub struct Args {
@@ -50,7 +50,10 @@ impl Args {
                 limit,
                 filter,
             } => {
-                let filter = filter.as_ref().map(|f| Regex::new(f)).transpose()?;
+                let filter = filter
+                    .as_ref()
+                    .map(|f| RegexBuilder::new(f).case_insensitive(true).build())
+                    .transpose()?;
                 client
                     .download_member(blog_id, &self.download_path, filter.as_ref(), *limit)
                     .await?;

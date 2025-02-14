@@ -7,7 +7,7 @@ members = ["common", "weibo", "weverse", "tiktok", "sns-archive", "naver-blog", 
 resolver = "2"
 
 [workspace.package]
-version = "0.5.1"
+version = "0.5.2"
 authors = ["Evan Chang"]
 description = "Unified social media archiver"
 license = "GPL-3.0-only"

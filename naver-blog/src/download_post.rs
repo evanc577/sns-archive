@@ -1,5 +1,6 @@
 use std::path::Path;
 use std::sync::LazyLock;
+use std::time::Duration;
 
 use futures::StreamExt;
 use reqwest::Url;
@@ -94,13 +95,33 @@ impl NaverBlogClient<'_> {
             })?;
 
         // Move tmp dir to final location
+        // On windows, sometimes moving the directory fails with OS err 5 for some reason,
+        // retry a few times before giving up
+        const ATTEMPTS: usize = 10;
         let final_dir_path = download_path.as_ref().join(slug);
-        tokio::fs::rename(tmp_dir_path, final_dir_path)
-            .await
-            .map_err(|e| NaverBlogError::DownloadBlogPost {
-                blog_post_url: blog_post_url.clone(),
-                msg: e.to_string(),
-            })?;
+        for i in 0.. {
+            let rename_res = tokio::fs::rename(&tmp_dir_path, &final_dir_path)
+                .await
+                .map_err(|e| NaverBlogError::DownloadBlogPost {
+                    blog_post_url: blog_post_url.clone(),
+                    msg: e.to_string(),
+                });
+
+            match rename_res {
+                Ok(_) => {
+                    break;
+                }
+                Err(err) => {
+                    // Give up if reached max attempts
+                    if i + 1 == ATTEMPTS {
+                        return Err(err);
+                    }
+
+                    // Sleep for a bit and try again
+                    tokio::time::sleep(Duration::from_millis(500)).await;
+                }
+            }
+        }
 
         pb.finish_and_clear();
         eprintln!("OK");
