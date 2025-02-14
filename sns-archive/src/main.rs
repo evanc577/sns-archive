@@ -19,16 +19,6 @@ struct Args {
 
 #[derive(Subcommand, Debug)]
 enum Sns {
-    /// Download Twitter tweets
-    Twitter {
-        /// Read tweets to save from input file, 1 tweet ID per line
-        #[arg(short, long)]
-        input: Option<PathBuf>,
-
-        /// Only save tweets from user
-        #[arg(short, long)]
-        filter: Option<String>,
-    },
     /// Download Weverse posts and moments
     #[command(verbatim_doc_comment)]
     Weverse,
@@ -81,16 +71,6 @@ async fn run() -> Result<()> {
                 sns_archive::weverse::download(conf).await?;
             } else {
                 return Err(anyhow!("Missing weverse section in config file"));
-            }
-        }
-        Sns::Twitter {
-            input: i,
-            filter: f,
-        } => {
-            if let Some(conf) = conf.twitter {
-                sns_archive::twitter::download(conf, i.as_deref(), f.as_deref()).await?;
-            } else {
-                return Err(anyhow!("Missing twitter section in config file"));
             }
         }
         Sns::Youtube => {
