@@ -8,3 +8,4 @@ mod progress_bar;
 pub use error::NaverBlogError;
 pub use naver_blog_client::NaverBlogClient;
 pub use progress_bar::ProgressBar;
+pub use naver_blog_client::ImageType;

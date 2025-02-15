@@ -7,7 +7,7 @@ use reqwest::Url;
 use tokio::io::AsyncWriteExt;
 
 use crate::util::{parse_date, slug, NaverBlogMetadata};
-use crate::{NaverBlogClient, NaverBlogError, ProgressBar};
+use crate::{ImageType, NaverBlogClient, NaverBlogError, ProgressBar};
 
 pub(crate) enum NaverBlogDownloadStatus {
     Downloaded,
@@ -20,6 +20,7 @@ impl NaverBlogClient<'_> {
         download_path: impl AsRef<Path>,
         member: &str,
         id: u64,
+        image_type: ImageType,
     ) -> Result<NaverBlogDownloadStatus, NaverBlogError> {
         // Get the page HTML
         let mut url = Url::parse("https://blog.naver.com/PostView.naver").unwrap();
@@ -66,7 +67,7 @@ impl NaverBlogClient<'_> {
 
         // Download blog post
         eprintln!("Downloading {}", &blog_post_url);
-        let images = extract_images(&document);
+        let images = extract_images(&document, image_type);
 
         // Progress bar
         let pb = PB::init(images.len(), &blog_post_url);
@@ -157,7 +158,7 @@ fn extract_post_metadata(
     })
 }
 
-fn extract_images(document: &scraper::Html) -> Vec<String> {
+fn extract_images(document: &scraper::Html, image_type: ImageType) -> Vec<String> {
     static SELECTOR: LazyLock<scraper::Selector> = LazyLock::new(|| {
         scraper::Selector::parse(".se-main-container .se-module-image-link > img").unwrap()
     });
@@ -169,11 +170,10 @@ fn extract_images(document: &scraper::Html) -> Vec<String> {
             // Change the query parameter to get the high res / original version
             let mut url = Url::parse(s).ok()?;
             match url.domain() {
-                Some("postfiles.pstatic.net") => {
-                    url.set_query(Some("type=w3840"));
-                }
-                Some("mblogthumb-phinf.pstatic.net") => {
-                    url.set_query(Some("type=o_webp"));
+                Some("postfiles.pstatic.net") | Some("mblogthumb-phinf.pstatic.net") => {
+                    url = Url::parse(&format!("https://{}{}", image_type.domain(), url.path()))
+                        .unwrap();
+                    url.set_query(Some(image_type.query()));
                 }
                 _ => {
                     eprintln!("INFO: external image: {:?}", url.as_str());

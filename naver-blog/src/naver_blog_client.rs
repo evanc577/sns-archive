@@ -25,6 +25,7 @@ impl<'client> NaverBlogClient<'client> {
         download_path: impl AsRef<Path>,
         filter: Option<&Regex>,
         limit: Option<usize>,
+        image_type: ImageType,
     ) -> Result<(), NaverBlogError> {
         let stream = self.pages(GetPostsRequest::new(member.to_owned())).items();
         futures::pin_mut!(stream);
@@ -47,7 +48,7 @@ impl<'client> NaverBlogClient<'client> {
 
             // Download the post
             let download_result = self
-                .download_post::<PB>(download_path.as_ref(), member, stub.post_id)
+                .download_post::<PB>(download_path.as_ref(), member, stub.post_id, image_type)
                 .await?;
             match download_result {
                 NaverBlogDownloadStatus::Downloaded => {}
@@ -61,13 +62,40 @@ impl<'client> NaverBlogClient<'client> {
         &self,
         url: &str,
         download_path: impl AsRef<Path>,
+        image_type: ImageType,
     ) -> Result<(), NaverBlogError> {
         let blog_id = parse_url(url).ok_or(NaverBlogError::InvalidUrl {
             url: url.to_owned(),
         })?;
-        self.download_post::<PB>(download_path, &blog_id.member, blog_id.id)
+        self.download_post::<PB>(download_path, &blog_id.member, blog_id.id, image_type)
             .await?;
         Ok(())
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum ImageType {
+    WebpOriginal,
+    JpegW3840,
+    JpegW966,
+    JpegW800,
+}
+
+impl ImageType {
+    pub(crate) fn domain(&self) -> &str {
+        match self {
+            ImageType::JpegW3840 | ImageType::JpegW966 => "postfiles.pstatic.net",
+            ImageType::WebpOriginal | ImageType::JpegW800 => "mblogthumb-phinf.pstatic.net",
+        }
+    }
+
+    pub(crate) fn query(&self) -> &str {
+        match self {
+            ImageType::WebpOriginal => "type=o_webp",
+            ImageType::JpegW3840 => "type=w3840",
+            ImageType::JpegW966 => "type=w966",
+            ImageType::JpegW800 => "type=w800",
+        }
     }
 }
 

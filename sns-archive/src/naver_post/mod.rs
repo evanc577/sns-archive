@@ -1,5 +1,5 @@
 use anyhow::Result;
-use naver_blog::NaverBlogClient;
+use naver_blog::{ImageType, NaverBlogClient};
 
 use crate::config::naver_post::NPMember;
 
@@ -13,6 +13,7 @@ pub async fn download_members(members: Vec<NPMember>) -> Result<()> {
                 member.download_path,
                 member.filter.as_ref(),
                 member.limit,
+                ImageType::WebpOriginal,
             )
             .await?;
     }
