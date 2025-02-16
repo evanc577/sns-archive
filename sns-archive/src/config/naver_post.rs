@@ -16,4 +16,6 @@ pub struct NPMember {
     pub limit: Option<usize>,
     #[serde(deserialize_with = "super::deserialize_path")]
     pub download_path: PathBuf,
+    pub until_post: Option<u64>,
+    pub since_post: Option<u64>,
 }

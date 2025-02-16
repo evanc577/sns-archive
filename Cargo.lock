@@ -2538,7 +2538,7 @@ checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
 [[package]]
 name = "klask"
 version = "1.0.0"
-source = "git+https://github.com/evanc577/klask.git#c28977beb1b143120adb9d61fb00542eb82c186a"
+source = "git+https://github.com/evanc577/klask.git#b459fbe0c6cefda5cff7a77ae6cd593f682687a1"
 dependencies = [
  "cansi",
  "clap",
@@ -2783,7 +2783,7 @@ dependencies = [
 
 [[package]]
 name = "naver-blog"
-version = "0.5.5"
+version = "0.5.6"
 dependencies = [
  "futures",
  "htmlize",
@@ -2804,7 +2804,7 @@ dependencies = [
 
 [[package]]
 name = "naver-blog-bin"
-version = "0.5.5"
+version = "0.5.6"
 dependencies = [
  "anyhow",
  "clap",
@@ -3183,9 +3183,9 @@ checksum = "945462a4b81e43c4e3ba96bd7b49d834c6f61198356aa858733bc4acf3cbe62e"
 
 [[package]]
 name = "openssl"
-version = "0.10.70"
+version = "0.10.71"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61cfb4e166a8bb8c9b55c500bc2308550148ece889be90f609377e58140f42c6"
+checksum = "5e14130c6a98cd258fdcb0fb6d744152343ff729cbfcb28c656a9d12b999fbcd"
 dependencies = [
  "bitflags 2.8.0",
  "cfg-if 1.0.0",
@@ -3215,9 +3215,9 @@ checksum = "d05e27ee213611ffe7d6348b942e8f942b37114c00cc03cec254295a4a17852e"
 
 [[package]]
 name = "openssl-sys"
-version = "0.9.105"
+version = "0.9.106"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b22d5b84be05a8d6947c7cb71f7c849aa0f112acd4bf51c2a7c1c988ac0a9dc"
+checksum = "8bb61ea9811cc39e3c2069f40b8b8e2e70d8569b361f879786cc7ed48b777cdd"
 dependencies = [
  "cc",
  "libc",
@@ -4214,7 +4214,7 @@ dependencies = [
 
 [[package]]
 name = "sns-archive"
-version = "0.5.5"
+version = "0.5.6"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4250,7 +4250,7 @@ dependencies = [
 
 [[package]]
 name = "sns_archive_common"
-version = "0.5.5"
+version = "0.5.6"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4563,7 +4563,7 @@ dependencies = [
 
 [[package]]
 name = "tiktok"
-version = "0.5.5"
+version = "0.5.6"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5248,7 +5248,7 @@ checksum = "53a85b86a771b1c87058196170769dd264f66c0782acf1ae6cc51bfd64b39082"
 
 [[package]]
 name = "weibo"
-version = "0.5.5"
+version = "0.5.6"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5267,7 +5267,7 @@ dependencies = [
 
 [[package]]
 name = "weverse"
-version = "0.5.5"
+version = "0.5.6"
 dependencies = [
  "anyhow",
  "async-once-cell",

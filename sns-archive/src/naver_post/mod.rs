@@ -14,6 +14,8 @@ pub async fn download_members(members: Vec<NPMember>) -> Result<()> {
                 member.filter.as_ref(),
                 member.limit,
                 ImageType::WebpOriginal,
+                member.until_post,
+                member.since_post,
             )
             .await?;
     }

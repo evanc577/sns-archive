@@ -11,8 +11,8 @@ pub struct Args {
     #[arg(value_hint = ValueHint::DirPath)]
     download_path: PathBuf,
 
-    /// Resolution and type image to download
-    #[arg(required = true, value_enum, short, long, default_value_t = ArgImageType::WebpOriginal)]
+    /// Resolution and type image to download.
+    #[arg(value_enum, short, long, default_value_t = ArgImageType::WebpOriginal)]
     image_type: ArgImageType,
 
     #[command(subcommand)]
@@ -40,24 +40,32 @@ impl From<ArgImageType> for ImageType {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    /// Download a specific Naver Blog post with its URL
+    /// Download a specific Naver Blog post with its URL.
     Url {
-        /// URL of Naver Blog post
+        /// URL of Naver Blog post.
         url: String,
     },
 
-    /// Download multiple Naver Blog posts
+    /// Download multiple Naver Blog posts.
     Member {
-        /// Username of the blog author
+        /// Username of the blog author.
         blog_id: String,
 
-        /// Limit number of blog posts download
+        /// Limit number of blog posts processed. Filtered posts will count towards the limit.
         #[arg(short, long)]
         limit: Option<usize>,
 
-        /// Only download blog posts matching this Regex
+        /// Only download blog posts matching this Regex.
         #[arg(short, long)]
         filter: Option<String>,
+
+        /// Newest blog posts ID to download.
+        #[arg(long)]
+        until_post: Option<u64>,
+
+        /// Oldest blog posts ID to download.
+        #[arg(long)]
+        since_post: Option<u64>,
     },
 }
 
@@ -76,6 +84,8 @@ impl Args {
                 blog_id,
                 limit,
                 filter,
+                until_post,
+                since_post,
             } => {
                 let filter = filter
                     .as_ref()
@@ -88,6 +98,8 @@ impl Args {
                         filter.as_ref(),
                         *limit,
                         self.image_type.into(),
+                        *until_post,
+                        *since_post,
                     )
                     .await?;
             }

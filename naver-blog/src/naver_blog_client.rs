@@ -26,11 +26,20 @@ impl<'client> NaverBlogClient<'client> {
         filter: Option<&Regex>,
         limit: Option<usize>,
         image_type: ImageType,
+        until_post: Option<u64>,
+        since_post: Option<u64>,
     ) -> Result<(), NaverBlogError> {
         let stream = self.pages(GetPostsRequest::new(member.to_owned())).items();
         futures::pin_mut!(stream);
         let mut idx = 0;
         while let Some(stub) = stream.try_next().await? {
+            // Only download posts in specified range
+            if until_post.map(|id| stub.post_id > id).unwrap_or(false)
+                || since_post.map(|id| stub.post_id < id).unwrap_or(false)
+            {
+                continue;
+            }
+
             // Break if limit is enabled and reached
             if let Some(limit) = limit {
                 if idx >= limit {
