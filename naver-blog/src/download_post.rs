@@ -169,15 +169,17 @@ fn extract_images(document: &scraper::Html, image_type: ImageType) -> Vec<String
         .filter_map(|s| {
             // Change the query parameter to get the high res / original version
             let mut url = Url::parse(s).ok()?;
-            match url.domain() {
-                Some("postfiles.pstatic.net") | Some("mblogthumb-phinf.pstatic.net") => {
-                    url = Url::parse(&format!("https://{}{}", image_type.domain(), url.path()))
-                        .unwrap();
-                    url.set_query(Some(image_type.query()));
-                }
-                _ => {
-                    eprintln!("INFO: external image: {:?}", url.as_str());
-                }
+            if ImageType::is_handled(&url) {
+                url = Url::parse(&format!(
+                    "{}://{}{}",
+                    image_type.protocol(),
+                    image_type.domain(),
+                    url.path()
+                ))
+                .unwrap();
+                url.set_query(image_type.query());
+            } else {
+                eprintln!("INFO: external image: {:?}", url.as_str());
             }
             Some(url.to_string())
         })

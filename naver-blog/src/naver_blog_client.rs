@@ -84,26 +84,52 @@ impl<'client> NaverBlogClient<'client> {
 
 #[derive(Clone, Copy, Debug)]
 pub enum ImageType {
+    JpegOriginal,
     WebpOriginal,
     JpegW3840,
     JpegW966,
     JpegW800,
 }
 
+static DOMAIN_BLOGFILES_NAVER_NET: &str = "blogfiles.naver.net";
+static DOMAIN_POSTFILES_PSTATIC_NET: &str = "postfiles.pstatic.net";
+static DOMAIN_MBLOGTHUMBPHINF_PSTATIC_NET: &str = "mblogthumb-phinf.pstatic.net";
+
 impl ImageType {
-    pub(crate) fn domain(&self) -> &str {
+    pub(crate) fn protocol(&self) -> &str {
         match self {
-            ImageType::JpegW3840 | ImageType::JpegW966 => "postfiles.pstatic.net",
-            ImageType::WebpOriginal | ImageType::JpegW800 => "mblogthumb-phinf.pstatic.net",
+            ImageType::JpegOriginal => "http",
+            _ => "https",
         }
     }
 
-    pub(crate) fn query(&self) -> &str {
+    pub(crate) fn domain(&self) -> &str {
         match self {
-            ImageType::WebpOriginal => "type=o_webp",
-            ImageType::JpegW3840 => "type=w3840",
-            ImageType::JpegW966 => "type=w966",
-            ImageType::JpegW800 => "type=w800",
+            ImageType::JpegOriginal => DOMAIN_BLOGFILES_NAVER_NET,
+            ImageType::JpegW3840 | ImageType::JpegW966 => DOMAIN_POSTFILES_PSTATIC_NET,
+            ImageType::WebpOriginal | ImageType::JpegW800 => DOMAIN_MBLOGTHUMBPHINF_PSTATIC_NET,
+        }
+    }
+
+    pub(crate) fn is_handled(url: &Url) -> bool {
+        match url.domain() {
+            None => false,
+            Some(domain) => match domain {
+                s if s == DOMAIN_BLOGFILES_NAVER_NET => true,
+                s if s == DOMAIN_POSTFILES_PSTATIC_NET => true,
+                s if s == DOMAIN_MBLOGTHUMBPHINF_PSTATIC_NET => true,
+                _ => false,
+            },
+        }
+    }
+
+    pub(crate) fn query(&self) -> Option<&str> {
+        match self {
+            ImageType::JpegOriginal => None,
+            ImageType::WebpOriginal => Some("type=o_webp"),
+            ImageType::JpegW3840 => Some("type=w3840"),
+            ImageType::JpegW966 => Some("type=w966"),
+            ImageType::JpegW800 => Some("type=w800"),
         }
     }
 }

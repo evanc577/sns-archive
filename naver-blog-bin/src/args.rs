@@ -12,7 +12,7 @@ pub struct Args {
     download_path: PathBuf,
 
     /// Resolution and type image to download.
-    #[arg(value_enum, short, long, default_value_t = ArgImageType::WebpOriginal)]
+    #[arg(value_enum, short, long, default_value_t = ArgImageType::JpegOriginal)]
     image_type: ArgImageType,
 
     #[command(subcommand)]
@@ -21,6 +21,7 @@ pub struct Args {
 
 #[derive(ValueEnum, Clone, Copy, Debug)]
 pub enum ArgImageType {
+    JpegOriginal,
     WebpOriginal,
     JpegW3840,
     JpegW966,
@@ -30,6 +31,7 @@ pub enum ArgImageType {
 impl From<ArgImageType> for ImageType {
     fn from(value: ArgImageType) -> Self {
         match value {
+            ArgImageType::JpegOriginal => ImageType::JpegOriginal,
             ArgImageType::WebpOriginal => ImageType::WebpOriginal,
             ArgImageType::JpegW3840 => ImageType::JpegW3840,
             ArgImageType::JpegW966 => ImageType::JpegW966,
