@@ -91,6 +91,12 @@ pub enum ImageType {
     JpegW800,
 }
 
+impl Default for ImageType {
+    fn default() -> Self {
+        Self::JpegOriginal
+    }
+}
+
 static DOMAIN_BLOGFILES_NAVER_NET: &str = "blogfiles.naver.net";
 static DOMAIN_POSTFILES_PSTATIC_NET: &str = "postfiles.pstatic.net";
 static DOMAIN_MBLOGTHUMBPHINF_PSTATIC_NET: &str = "mblogthumb-phinf.pstatic.net";

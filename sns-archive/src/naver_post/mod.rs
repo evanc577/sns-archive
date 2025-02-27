@@ -13,7 +13,7 @@ pub async fn download_members(members: Vec<NPMember>) -> Result<()> {
                 member.download_path,
                 member.filter.as_ref(),
                 member.limit,
-                ImageType::WebpOriginal,
+                ImageType::default(),
                 member.until_post,
                 member.since_post,
             )
