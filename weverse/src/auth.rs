@@ -21,7 +21,7 @@ use crate::error::WeverseError;
 lazy_static! {
     static ref JS_RE: Regex = Regex::new(r#"src="(?P<url>[^"]*js/main.\w+\.js[^"]*)""#).unwrap();
     // TODO: Think of a better way to extract hmac secret
-    static ref SECRET_RE: Regex = Regex::new(r#"(?P<key>[a-f0-9]{40})"#).unwrap();
+    static ref SECRET_RE: Regex = Regex::new(r#"https://clogs\.weverse\.io.*?(?P<key>[a-f0-9]{40})"#).unwrap();
     // static ref SECRET_RE: Regex = Regex::new(r#"return\s?"(?P<key>[a-fA-F0-9]{16,})""#).unwrap();
 }
 

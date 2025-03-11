@@ -22,7 +22,7 @@ pub(crate) async fn me(client: &Client, auth: &str) -> Result<Me> {
     let secret = get_secret(client).await?;
     let url = compute_url(
         &format!(
-            "/users/v1.0/users/me?appId={}&language=en&platform=WEB&wpf=pc",
+            "/users/v1.0/users/me?appId={}&language=en&os=WEB&platform=WEB&wpf=pc",
             APP_ID
         ),
         &secret,
