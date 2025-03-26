@@ -55,6 +55,7 @@ pub fn download(config: YoutubeConfig) -> Result<(), YTError> {
             &filter,
             new_channel,
             &config.archive_path,
+            &config.proxy,
         );
         let mut child = Command::new("yt-dlp")
             .stdout(Stdio::inherit())
@@ -96,6 +97,7 @@ fn generate_cmd_args(
     default_filter: &str,
     new_channel: bool,
     archive_path: impl AsRef<Path>,
+    proxy: &Option<String>,
 ) -> Vec<OsString> {
     let mut args = vec![
         OsString::from("--format-sort"),
@@ -139,6 +141,11 @@ fn generate_cmd_args(
             Some(end) => args.push(end.to_string().into()),
             None => args.push("100".into()),
         }
+    }
+
+    if let Some(proxy) = proxy {
+        args.push("--proxy".into());
+        args.push(proxy.into());
     }
 
     args.push(channel_id_to_url(&channel.channel_id).into());

@@ -11,6 +11,7 @@ pub struct YoutubeConfig {
     pub archive_path: PathBuf,
     pub channels: Vec<YTChannel>,
     pub filter: String,
+    pub proxy: Option<String>,
 }
 
 #[derive(Deserialize, Debug)]
