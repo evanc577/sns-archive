@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{BinaryHeap, VecDeque};
 use std::time::Duration;
 
 use anyhow::{anyhow, Result};
@@ -20,6 +20,7 @@ struct FetchState {
     errored: bool,
     page: u64,
     posts: VecDeque<WeiboPost>,
+    pinned: BinaryHeap<WeiboPost>,
 }
 
 impl Default for FetchState {
@@ -28,6 +29,7 @@ impl Default for FetchState {
             errored: false,
             page: 1,
             posts: Default::default(),
+            pinned: BinaryHeap::new(),
         }
     }
 }
@@ -52,14 +54,14 @@ impl WeiboPosts {
                 return None;
             }
 
-            // Return next post if it exists
-            if let Some(post) = state.fetch_state.posts.pop_front() {
-                return Some((Ok(post), state));
+            if let Some(post) = state.next_post() {
+                return Some((post, state));
             }
 
             match get_page(client, &state.auth, state.user, state.fetch_state.page).await {
-                Ok(p) => {
-                    state.fetch_state.posts.extend(p.into_iter());
+                Ok(data) => {
+                    state.fetch_state.posts.extend(data.posts.into_iter());
+                    state.fetch_state.pinned.extend(data.pinned.into_iter());
                     state.fetch_state.page += 1;
                 }
                 Err(e) => {
@@ -69,21 +71,42 @@ impl WeiboPosts {
             }
 
             // Return next post if it exists
-            if let Some(post) = state.fetch_state.posts.pop_front() {
-                return Some((Ok(post), state));
+            if let Some(post) = state.next_post() {
+                return Some((post, state));
             }
 
             None
         })
     }
+
+    fn next_post(&mut self) -> Option<Result<WeiboPost>> {
+        if let Some(post) = self.fetch_state.posts.pop_front() {
+            if let Some(pinned) = self.fetch_state.pinned.peek() {
+                if pinned.id > post.id {
+                    // If pinned post is newer than current post, put the current post back
+                    // into the list
+                    self.fetch_state.posts.push_front(post);
+
+                    // Pop the pinned post and return it
+                    let pinned = self.fetch_state.pinned.pop().unwrap();
+                    return Some(Ok(pinned));
+                }
+            }
+
+            // Otherwise just return the current post
+            return Some(Ok(post));
+        }
+
+        None
+    }
 }
 
-pub async fn get_page(
-    client: &Client,
-    auth: &WeiboAuth,
-    uid: u64,
-    page: u64,
-) -> Result<Vec<WeiboPost>> {
+struct GetPageData {
+    posts: Vec<WeiboPost>,
+    pinned: Vec<WeiboPost>,
+}
+
+async fn get_page(client: &Client, auth: &WeiboAuth, uid: u64, page: u64) -> Result<GetPageData> {
     static URL: &str = "https://weibo.com/ajax/statuses/mymblog";
 
     #[derive(Deserialize, Debug)]
@@ -124,5 +147,7 @@ pub async fn get_page(
         p.set_tid(auth.tid.clone());
     }
 
-    Ok(posts)
+    let (pinned, posts) = posts.into_iter().partition(|post| post.pinned);
+
+    Ok(GetPageData { posts, pinned })
 }

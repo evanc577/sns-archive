@@ -5,6 +5,7 @@ authors.workspace = true
 version.workspace = true
 description.workspace = true
 license.workspace = true
+default-run = "sns-archive"
 
 [dependencies]
 anyhow = { workspace = true }

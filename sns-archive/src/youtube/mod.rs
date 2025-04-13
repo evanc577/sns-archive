@@ -26,11 +26,9 @@ impl Display for YTError {
 impl std::error::Error for YTError {}
 
 pub fn download(config: YoutubeConfig) -> Result<(), YTError> {
-    let channels = config.channels;
-    let filter = config.filter;
     let mut errored_channels = vec![];
 
-    for channel in channels {
+    for channel in config.channels {
         if !channel.enabled {
             continue;
         }
@@ -52,7 +50,7 @@ pub fn download(config: YoutubeConfig) -> Result<(), YTError> {
         let args = generate_cmd_args(
             &channel,
             target_dir,
-            &filter,
+            &config.filter,
             new_channel,
             &config.archive_path,
             &config.proxy,

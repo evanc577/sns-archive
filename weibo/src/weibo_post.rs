@@ -18,7 +18,7 @@ use tokio::io::AsyncWriteExt;
 pub struct WeiboPost {
     #[serde(deserialize_with = "deserialize_datetime")]
     created_at: OffsetDateTime,
-    id: u64,
+    pub id: u64,
     user: WeiboUser,
     #[serde(rename = "text_raw")]
     text: String,
@@ -28,7 +28,31 @@ pub struct WeiboPost {
     urls: Option<Vec<WeiboUrl>>,
     #[serde(skip)]
     tid: String,
+    #[serde(rename = "isTop")]
+    #[serde(deserialize_with = "deserialize_pinned")]
+    #[serde(default)]
+    pub pinned: bool,
 }
+
+impl std::cmp::Ord for WeiboPost {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.id.cmp(&other.id)
+    }
+}
+
+impl std::cmp::PartialOrd for WeiboPost {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl std::cmp::PartialEq for WeiboPost {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+impl std::cmp::Eq for WeiboPost {}
 
 impl WeiboPost {
     pub fn set_tid(&mut self, s: String) {
@@ -49,6 +73,14 @@ where
         Lazy::new(|| format_description::parse(FMT).unwrap());
     let s = String::deserialize(deserializer)?;
     OffsetDateTime::parse(&s, &PARSE_FORMAT).map_err(serde::de::Error::custom)
+}
+
+fn deserialize_pinned<'de, D>(deserializer: D) -> Result<bool, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let v = i64::deserialize(deserializer).map_err(serde::de::Error::custom)?;
+    Ok(v == 1)
 }
 
 #[allow(dead_code)]
