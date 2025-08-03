@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use anyhow::{anyhow, Result};
 use futures::Stream;
-use reqwest::header::COOKIE;
+use reqwest::header;
 use reqwest::{Client, StatusCode};
 use serde::Deserialize;
 
@@ -124,7 +124,8 @@ async fn get_page(client: &Client, auth: &WeiboAuth, uid: u64, page: u64) -> Res
         let resp = client
             .get(URL)
             .query(&[("uid", &uid.to_string()), ("page", &page.to_string())])
-            .header(COOKIE, format!("SUB={}", auth.cookies))
+            .header(header::COOKIE, format!("SUB={}", auth.cookies))
+            .header(header::REFERER, format!("https://weibo.com/u/{}", uid))
             .send()
             .await?;
 
