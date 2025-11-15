@@ -176,10 +176,14 @@ fn directory_exists(path: &impl AsRef<Path>) -> bool {
 }
 
 fn channel_id_to_url(channel_id: &str) -> String {
-    format!(
-        "https://www.youtube.com/playlist?list=UU{}",
-        &channel_id[2..]
-    )
+    if channel_id.starts_with("http") {
+        channel_id.to_owned()
+    } else {
+        format!(
+            "https://www.youtube.com/playlist?list=UU{}",
+            &channel_id[2..]
+        )
+    }
 }
 
 fn error_is_geo_restrict(log: &str) -> bool {
