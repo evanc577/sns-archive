@@ -178,7 +178,7 @@ impl WeiboPost {
 }
 
 impl WeiboUrl {
-    fn is_video(&self) -> Option<Cow<str>> {
+    fn is_video(&'_ self) -> Option<Cow<'_, str>> {
         if self.url.starts_with("https://video.weibo.com") {
             let fid = Url::parse(&self.url)
                 .unwrap()
@@ -238,7 +238,7 @@ async fn download_video(client: &Client, url: &str, path: impl AsRef<Path>) -> R
         "https://weibo.com/tv/api/component?page={}",
         parsed_url.path()
     );
-    let id = parsed_url.path_segments().unwrap().last().unwrap();
+    let id = parsed_url.path_segments().unwrap().next_back().unwrap();
     let cookie = "SUB=_";
     let content_type = "application/x-www-form-urlencoded";
     let data = format!(r#"data={{"Component_Play_Playinfo":{{"oid":"{}"}}}}"#, id);

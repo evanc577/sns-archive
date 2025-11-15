@@ -19,6 +19,7 @@ impl<'client> NaverBlogClient<'client> {
         Self { client }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn download_member<PB: ProgressBar>(
         &self,
         member: &str,
@@ -82,19 +83,14 @@ impl<'client> NaverBlogClient<'client> {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Default, Debug)]
 pub enum ImageType {
+    #[default]
     JpegOriginal,
     WebpOriginal,
     JpegW3840,
     JpegW966,
     JpegW800,
-}
-
-impl Default for ImageType {
-    fn default() -> Self {
-        Self::JpegOriginal
-    }
 }
 
 static DOMAIN_BLOGFILES_NAVER_NET: &str = "blogfiles.naver.net";

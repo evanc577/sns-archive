@@ -160,6 +160,7 @@ struct VideoUploadInfo {
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+#[allow(dead_code)]
 enum PostType {
     Normal,
     Moment,
