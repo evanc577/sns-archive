@@ -2851,7 +2851,7 @@ dependencies = [
 
 [[package]]
 name = "naver-blog"
-version = "0.5.11"
+version = "0.5.13"
 dependencies = [
  "futures",
  "htmlize",
@@ -2872,7 +2872,7 @@ dependencies = [
 
 [[package]]
 name = "naver-blog-bin"
-version = "0.5.11"
+version = "0.5.13"
 dependencies = [
  "anyhow",
  "clap",
@@ -4448,7 +4448,7 @@ dependencies = [
 
 [[package]]
 name = "sns-archive"
-version = "0.5.11"
+version = "0.5.13"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4484,7 +4484,7 @@ dependencies = [
 
 [[package]]
 name = "sns_archive_common"
-version = "0.5.11"
+version = "0.5.13"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4799,7 +4799,7 @@ dependencies = [
 
 [[package]]
 name = "tiktok"
-version = "0.5.11"
+version = "0.5.13"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5578,7 +5578,7 @@ checksum = "a28ac98ddc8b9274cb41bb4d9d4d5c425b6020c50c46f25559911905610b4a88"
 
 [[package]]
 name = "weibo"
-version = "0.5.11"
+version = "0.5.13"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5597,7 +5597,7 @@ dependencies = [
 
 [[package]]
 name = "weverse"
-version = "0.5.11"
+version = "0.5.13"
 dependencies = [
  "anyhow",
  "async-once-cell",
