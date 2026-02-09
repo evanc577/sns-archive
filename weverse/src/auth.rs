@@ -6,7 +6,6 @@ use anyhow::Result;
 use base64::engine::general_purpose;
 use base64::Engine as _;
 use hmac::{Hmac, Mac};
-use lazy_static::lazy_static;
 use regex::Regex;
 use reqwest::{header, Client, Url};
 use serde::{Deserialize, Serialize};
@@ -83,15 +82,6 @@ pub(crate) async fn compute_url(base_url: &str, secret: &[u8]) -> Result<Url> {
         .append_pair("wmd", &digest);
 
     Ok(url)
-}
-
-lazy_static! {
-    static ref APP_JS_RE: Regex =
-        Regex::new(r#"\bsrc="(?P<path>[^"]*_app-[0-9a-zA-Z]+\.js)""#).unwrap();
-    static ref APP_SECRET_RE: Regex =
-        Regex::new(r#"\bAPP_SECRET,\s*"(?P<secret>[0-9a-zA-Z]+)""#).unwrap();
-    static ref APP_VERSION_RE: Regex =
-        Regex::new(r#"\bAPP_VERSION,\s*"(?P<version>[0-9\.]+)""#).unwrap();
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -209,11 +199,8 @@ async fn load_saved_authorization(username: &str) -> Result<Option<SavedAuthoriz
     Ok(authorizations.get(username).cloned())
 }
 
-lazy_static! {
-    static ref AUTH_FILE_MTX: Mutex<()> = Mutex::new(());
-}
-
 async fn store_authorization(username: &str, authoriazation: &str, refresh: &str) -> Result<()> {
+    static AUTH_FILE_MTX: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
     let _guard = AUTH_FILE_MTX.lock().await;
 
     let filename = saved_authorization_file()?;
