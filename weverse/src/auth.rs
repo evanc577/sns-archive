@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::LazyLock;
 
 use anyhow::Result;
 use base64::engine::general_purpose;
@@ -18,37 +19,45 @@ use tokio::sync::Mutex;
 use crate::endpoint::me::me;
 use crate::error::WeverseError;
 
-lazy_static! {
-    static ref JS_RE: Regex = Regex::new(r#"src="(?P<url>[^"]*js/main.\w+\.js[^"]*)""#).unwrap();
-    // TODO: Think of a better way to extract hmac secret
-    static ref SECRET_RE: Regex = Regex::new(r#"https://clogs\.weverse\.io.*?(?P<key>[a-f0-9]{40})"#).unwrap();
-    // static ref SECRET_RE: Regex = Regex::new(r#"return\s?"(?P<key>[a-fA-F0-9]{16,})""#).unwrap();
-}
-
 pub(crate) async fn get_secret(client: &Client) -> Result<Vec<u8>> {
-    // Get js script
+    static JS_SEL: LazyLock<scraper::Selector> =
+        LazyLock::new(|| scraper::Selector::parse("link").unwrap());
+
+    // Get JS scripts
     let resp = client
         .get("https://weverse.io")
         .send()
         .await?
         .text()
         .await?;
-    let js_url = JS_RE
-        .captures(&resp)
-        .ok_or(WeverseError::Auth)?
-        .name("url")
-        .unwrap()
-        .as_str();
+    let links: Vec<_> = scraper::Html::parse_document(&resp)
+        .select(&JS_SEL)
+        .filter_map(|l| l.attr("href"))
+        .map(|x| x.to_owned())
+        .collect();
 
-    // Extract key from js script
-    let resp = client.get(js_url).send().await?.text().await?;
-    let key = SECRET_RE
-        .captures(&resp)
-        .and_then(|x| x.name("key"))
-        .map(|x| x.as_str().as_bytes().to_vec())
-        .ok_or(WeverseError::Auth)?;
+    // Find first HMAC in JS script data
+    let futs = links.iter().map(|link| Box::pin(find_hmac(client, link)));
+    if let Ok(hmac) = futures::future::select_ok(futs).await {
+        return Ok(hmac.0);
+    }
+    Err(WeverseError::Auth.into())
+}
 
-    Ok(key)
+/// Find anything that looks like an HMAC in js files
+async fn find_hmac(client: &Client, url: &str) -> Result<Vec<u8>, ()> {
+    static SECRET_RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r#""(?P<hmac>[0-9a-f]{40})","HMAC_ACTIVE""#).unwrap());
+
+    let resp = client.get(url).send().await.map_err(|_| ())?;
+    if !resp.status().is_success() {
+        return Err(());
+    }
+    let js_data = resp.text().await.map_err(|_| ())?;
+    if let Some(hmac) = SECRET_RE.captures(&js_data).and_then(|x| x.name("hmac")) {
+        return Ok(hmac.as_str().as_bytes().to_vec());
+    }
+    Err(())
 }
 
 pub(crate) async fn compute_url(base_url: &str, secret: &[u8]) -> Result<Url> {
@@ -103,7 +112,7 @@ pub(crate) async fn login(client: &Client, login_info: &LoginInfo) -> Result<Str
     // Check saved authorization
     let auth = if let Ok(Some(auth)) = load_saved_authorization(&login_info.email).await {
         // Check login status
-        validate_or_refresh_bearer( client, &login_info.email, &auth).await?
+        validate_or_refresh_bearer(client, &login_info.email, &auth).await?
     } else {
         return Err(WeverseError::Login)?;
     };
@@ -133,7 +142,10 @@ async fn validate_or_refresh_bearer(
     let valid: ValidateResponse = client
         .get("https://accountapi.weverse.io/api/v1/token/validate")
         .header("x-acc-service-id", "weverse")
-        .header(header::AUTHORIZATION, &format!("Bearer {}", auth.authorization))
+        .header(
+            header::AUTHORIZATION,
+            &format!("Bearer {}", auth.authorization),
+        )
         .send()
         .await?
         .error_for_status()?
@@ -149,17 +161,19 @@ async fn validate_or_refresh_bearer(
     #[derive(Serialize, Clone, Debug)]
     #[serde(rename_all = "camelCase")]
     struct RefreshRequestData {
-        refresh_token:  String,
+        refresh_token: String,
     }
     #[derive(Deserialize, Clone, Debug)]
     #[serde(rename_all = "camelCase")]
     struct RefreshResponse {
         access_token: String,
-        refresh_token:  String,
+        refresh_token: String,
     }
     let new_token: RefreshResponse = client
         .post("https://accountapi.weverse.io/api/v1/token/refresh")
-        .json(&RefreshRequestData { refresh_token: auth.refresh.clone()})
+        .json(&RefreshRequestData {
+            refresh_token: auth.refresh.clone(),
+        })
         .send()
         .await?
         .error_for_status()?

@@ -5611,6 +5611,7 @@ dependencies = [
  "regex",
  "reqwest",
  "sanitize-filename",
+ "scraper",
  "serde",
  "serde_json",
  "sha1",

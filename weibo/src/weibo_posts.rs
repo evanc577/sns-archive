@@ -141,7 +141,7 @@ async fn get_page(client: &Client, auth: &WeiboAuth, uid: u64, page: u64) -> Res
             continue;
         }
 
-        break resp.json::<Mymblog>().await?.data.list;
+        break resp.error_for_status()?.json::<Mymblog>().await?.data.list;
     };
 
     for p in posts.iter_mut() {
